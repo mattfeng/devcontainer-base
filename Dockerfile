@@ -29,7 +29,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   python3-pip \
   python3-venv \
   pipx \
+  bubblewrap \
   && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# make sure bubblewrap can make unprivileged namespaces
+RUN chmod u+s /usr/bin/bwrap
 
 # Ensure default node user has access to /usr/local/share
 RUN mkdir -p /usr/local/share/npm-global && \
