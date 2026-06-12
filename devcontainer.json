@@ -19,7 +19,8 @@
     "--security-opt=seccomp=unconfined",
     "--security-opt=apparmor=unconfined",
     "--cap-add=NET_ADMIN",
-    "--cap-add=NET_RAW"
+    "--cap-add=NET_RAW",
+    "--add-host=host.docker.internal:host-gateway"
   ],
   "customizations": {
     "vscode": {
