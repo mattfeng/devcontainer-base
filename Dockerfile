@@ -5,6 +5,9 @@ ENV TZ="$TZ"
 
 ARG CLAUDE_CODE_VERSION=latest
 ARG CODEX_CLI_VERSION=latest
+ARG YARN_VERSION=stable
+
+ENV COREPACK_HOME=/usr/local/share/corepack
 
 # Install basic development tools and iptables/ipset
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -34,6 +37,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # make sure bubblewrap can make unprivileged namespaces
 RUN chmod u+s /usr/bin/bwrap
+
+RUN corepack enable && \
+  corepack install --global "yarn@${YARN_VERSION}" && \
+  yarn --version
 
 # Ensure default node user has access to /usr/local/share
 RUN mkdir -p /usr/local/share/npm-global && \
