@@ -92,19 +92,31 @@ for domain in \
     done < <(echo "$ips")
 done
 
-# Get host IP from default route
-HOST_IP=$(ip route | grep default | cut -d" " -f3)
+# Get the host gateway IP used by host.docker.internal.
+HOST_IP=$(getent ahostsv4 host.docker.internal | awk '{print $1; exit}')
 if [ -z "$HOST_IP" ]; then
-    echo "ERROR: Failed to detect host IP"
+    HOST_IP=$(ip route | grep default | cut -d" " -f3)
+fi
+if [ -z "$HOST_IP" ]; then
+    echo "ERROR: Failed to detect host gateway IP"
     exit 1
 fi
 
-HOST_NETWORK=$(echo "$HOST_IP" | sed "s/\.[0-9]*$/.0\/24/")
-echo "Host network detected as: $HOST_NETWORK"
+echo "Host gateway detected as: $HOST_IP"
 
-# Set up remaining iptables rules
-iptables -A INPUT -s "$HOST_NETWORK" -j ACCEPT
-iptables -A OUTPUT -d "$HOST_NETWORK" -j ACCEPT
+# Allow only configured host ports through host.docker.internal.
+if [ -n "${DEVCONTAINER_HOST_PORTS:-}" ]; then
+    for port in ${DEVCONTAINER_HOST_PORTS//,/ }; do
+        if [[ ! "$port" =~ ^[0-9]+$ ]] || [ "$port" -lt 1 ] || [ "$port" -gt 65535 ]; then
+            echo "ERROR: Invalid DEVCONTAINER_HOST_PORTS entry: $port"
+            exit 1
+        fi
+        echo "Allowing host.docker.internal:$port"
+        iptables -A OUTPUT -p tcp -d "$HOST_IP" --dport "$port" -j ACCEPT
+    done
+else
+    echo "No host.docker.internal ports configured"
+fi
 
 # Set default policies to DROP first
 iptables -P INPUT DROP

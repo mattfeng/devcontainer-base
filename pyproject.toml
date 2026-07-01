@@ -1,0 +1,22 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "codex-claude-devcontainer-configurator"
+version = "0.1.0"
+description = "Interactive configurator for Codex and Claude Code dev containers"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+authors = [
+  { name = "Codex" }
+]
+dependencies = []
+
+[project.scripts]
+codex-claude-devcontainer-configurator = "devcontainer_configurator.cli:main"
+configure-devcontainer = "devcontainer_configurator.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/devcontainer_configurator"]

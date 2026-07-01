@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "host_ports": [],
+  "hidden_paths": [
+    ".jj",
+    ".git"
+  ],
+  "gpu": {
+    "mode": "none",
+    "device": ""
+  }
+}
