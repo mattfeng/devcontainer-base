@@ -20,6 +20,7 @@ LEGACY_MARKER_FILENAMES = [
     ".codex-claude-devcontainer-configurator.json",
 ]
 MANAGED_FILES = ["Dockerfile", "devcontainer.json", "init-firewall.sh"]
+MASKED_FILE_PLACEHOLDER = ".empty-mask"
 
 DEFAULT_MASKED_PATHS = [".jj", ".git"]
 DEFAULT_READ_ONLY_PATHS = [".devcontainer"]
@@ -327,7 +328,14 @@ def configure(workspace: Path) -> int:
         "gpu": gpu,
     }
 
-    generated_files = render_files(host_ports, masked_paths, read_only_paths, gpu)
+    masked_file_paths = detect_masked_file_paths(workspace, masked_paths)
+    generated_files = render_files(
+        host_ports,
+        masked_paths,
+        read_only_paths,
+        gpu,
+        masked_file_paths,
+    )
     for relative_path, content in generated_files.items():
         path = devcontainer_dir / relative_path
         path.write_text(content, encoding="utf-8")
@@ -367,7 +375,8 @@ def validate_generated_devcontainer(devcontainer_dir: Path, marker: dict[str, An
     if not isinstance(hashes, dict):
         raise ValueError(f"{devcontainer_dir} marker is missing managed file hashes")
 
-    for relative_path in MANAGED_FILES:
+    managed_paths = list(dict.fromkeys([*MANAGED_FILES, *hashes.keys()]))
+    for relative_path in managed_paths:
         expected_hash = hashes.get(relative_path)
         if not isinstance(expected_hash, str):
             raise ValueError(f"{devcontainer_dir} marker is missing {relative_path}")
@@ -386,13 +395,21 @@ def render_files(
     masked_paths: list[str],
     read_only_paths: list[str],
     gpu: dict[str, str],
+    masked_file_paths: list[str] | None = None,
 ) -> dict[str, str]:
     return {
         "Dockerfile": DOCKERFILE_TEMPLATE,
         "devcontainer.json": json_text(
-            build_devcontainer_json(host_ports, masked_paths, read_only_paths, gpu)
+            build_devcontainer_json(
+                host_ports,
+                masked_paths,
+                read_only_paths,
+                gpu,
+                masked_file_paths,
+            )
         ),
         "init-firewall.sh": FIREWALL_TEMPLATE,
+        MASKED_FILE_PLACEHOLDER: "",
     }
 
 
@@ -413,8 +430,14 @@ def build_devcontainer_json(
     masked_paths: list[str],
     read_only_paths: list[str],
     gpu: dict[str, str],
+    masked_file_paths: list[str] | None = None,
 ) -> dict[str, Any]:
     validate_path_lists(masked_paths, read_only_paths)
+    normalized_masked_paths = normalize_workspace_paths(masked_paths, "Masked")
+    normalized_read_only_paths = normalize_workspace_paths(read_only_paths, "Read-only")
+    masked_file_path_set = set(
+        normalize_workspace_paths(masked_file_paths or [], "Masked file")
+    )
     run_args: list[str] = [
         "--cap-add=SYS_ADMIN",
         "--cap-add=SYS_CHROOT",
@@ -475,8 +498,11 @@ def build_devcontainer_json(
             "source=claude-code-bashhistory-${devcontainerId},target=/commandhistory,type=volume",
             "source=claude-code-config-${devcontainerId},target=/home/node/.claude,type=volume",
             "source=codex-config-${devcontainerId},target=/home/node/.codex,type=volume",
-            *[masked_mount(path) for path in masked_paths],
-            *[read_only_mount(path) for path in read_only_paths],
+            *[
+                masked_mount(path, is_file=path in masked_file_path_set)
+                for path in normalized_masked_paths
+            ],
+            *[read_only_mount(path) for path in normalized_read_only_paths],
         ],
         "containerEnv": {
             "NODE_OPTIONS": "--max-old-space-size=4096",
@@ -676,6 +702,15 @@ def validate_path_lists(masked_paths: list[Any], read_only_paths: list[Any]) -> 
         raise ValueError(f"Paths cannot be both masked and read-only: {paths}")
 
 
+def detect_masked_file_paths(workspace: Path, masked_paths: list[Any]) -> list[str]:
+    file_paths: list[str] = []
+    for path in normalize_workspace_paths(masked_paths, "Masked"):
+        workspace_path = workspace / path
+        if workspace_path.exists() and not workspace_path.is_dir():
+            file_paths.append(path)
+    return file_paths
+
+
 def parse_gpu(raw: str) -> dict[str, str]:
     value = raw.strip().lower()
     if value in {"none", "no", "-"}:
@@ -736,7 +771,12 @@ def format_ports(ports: list[int]) -> str:
     return ",".join(str(port) for port in normalize_host_ports(ports))
 
 
-def masked_mount(path: str) -> str:
+def masked_mount(path: str, *, is_file: bool = False) -> str:
+    if is_file:
+        return (
+            f"source=${{localWorkspaceFolder}}/.devcontainer/{MASKED_FILE_PLACEHOLDER},"
+            f"target=/workspace/{path},type=bind,readonly"
+        )
     return f"target=/workspace/{path},type=volume,volume-nocopy"
 
 

@@ -18,12 +18,14 @@ class DevcontainerMountTests(unittest.TestCase):
             masked_paths=[".git", "private/file.txt"],
             read_only_paths=[".devcontainer", "README.md"],
             gpu=cli.DEFAULT_GPU,
+            masked_file_paths=["private/file.txt"],
         )
 
         mounts = devcontainer["mounts"]
         self.assertIn("target=/workspace/.git,type=volume,volume-nocopy", mounts)
         self.assertIn(
-            "target=/workspace/private/file.txt,type=volume,volume-nocopy",
+            "source=${localWorkspaceFolder}/.devcontainer/.empty-mask,"
+            "target=/workspace/private/file.txt,type=bind,readonly",
             mounts,
         )
         self.assertIn(
@@ -54,6 +56,32 @@ class DevcontainerMountTests(unittest.TestCase):
                 read_only_paths=["./config"],
                 gpu=cli.DEFAULT_GPU,
             )
+
+    def test_detect_masked_file_paths_uses_workspace_file_type(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            (workspace / ".git").mkdir()
+            (workspace / "secret.txt").write_text("secret", encoding="utf-8")
+
+            self.assertEqual(
+                cli.detect_masked_file_paths(
+                    workspace,
+                    [".git", "secret.txt", "missing.txt"],
+                ),
+                ["secret.txt"],
+            )
+
+    def test_render_files_includes_empty_mask_placeholder(self) -> None:
+        generated_files = cli.render_files(
+            host_ports=[],
+            masked_paths=["secret.txt"],
+            read_only_paths=[],
+            gpu=cli.DEFAULT_GPU,
+            masked_file_paths=["secret.txt"],
+        )
+
+        self.assertIn(cli.MASKED_FILE_PLACEHOLDER, generated_files)
+        self.assertEqual(generated_files[cli.MASKED_FILE_PLACEHOLDER], "")
 
 
 class MarkerFileTests(unittest.TestCase):
