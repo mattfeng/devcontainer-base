@@ -28,8 +28,9 @@ The configurator prompts for:
 
 - GPU access: no GPUs, all GPUs, or one specific GPU device
 - Host TCP ports the container can reach through `host.docker.internal`
-- Workspace paths to hide from the container, defaulting to `.jj`, `.git`,
-  and `.devcontainer`
+- Workspace paths to mask from the container, defaulting to `.jj` and `.git`
+- Workspace paths to mount read-only in the container, defaulting to
+  `.devcontainer`
 
 The configurator creates `.devcontainer/Dockerfile`,
 `.devcontainer/devcontainer.json`, and `.devcontainer/init-firewall.sh`.

@@ -11,13 +11,14 @@ from typing import Any
 
 
 TOOL_NAME = "codex-claude-devcontainer-configurator"
-CONFIG_VERSION = 2
+CONFIG_VERSION = 3
 DEVCONTAINER_DIRNAME = ".devcontainer"
 ROOT_STATE_FILENAME = ".devcontainer-configurator.json"
 MARKER_FILENAME = ".codex-claude-devcontainer-configurator.json"
 MANAGED_FILES = ["Dockerfile", "devcontainer.json", "init-firewall.sh"]
 
-DEFAULT_HIDDEN_PATHS = [".jj", ".git", ".devcontainer"]
+DEFAULT_MASKED_PATHS = [".jj", ".git"]
+DEFAULT_READ_ONLY_PATHS = [".devcontainer"]
 DEFAULT_HOST_PORTS: list[int] = []
 HOST_PORTS_ENV = "DEVCONTAINER_HOST_PORTS"
 HOST_GATEWAY_ARG = "--add-host=host.docker.internal:host-gateway"
@@ -303,22 +304,24 @@ def configure(workspace: Path) -> int:
         devcontainer_dir.mkdir()
 
     current_host_ports = config_list(prior_config, "host_ports", DEFAULT_HOST_PORTS)
-    current_hidden_paths = config_list(
-        prior_config, "hidden_paths", DEFAULT_HIDDEN_PATHS
-    )
+    current_masked_paths = config_masked_paths(prior_config)
+    current_read_only_paths = config_read_only_paths(prior_config)
     current_gpu = config_gpu(prior_config)
 
     host_ports = prompt_host_ports(current_host_ports)
-    hidden_paths = prompt_hidden_paths(current_hidden_paths)
+    masked_paths = prompt_masked_paths(current_masked_paths)
+    read_only_paths = prompt_read_only_paths(current_read_only_paths)
+    validate_path_lists(masked_paths, read_only_paths)
     gpu = prompt_gpu(current_gpu)
     config = {
         "version": CONFIG_VERSION,
         "host_ports": host_ports,
-        "hidden_paths": hidden_paths,
+        "masked_paths": masked_paths,
+        "read_only_paths": read_only_paths,
         "gpu": gpu,
     }
 
-    generated_files = render_files(host_ports, hidden_paths, gpu)
+    generated_files = render_files(host_ports, masked_paths, read_only_paths, gpu)
     for relative_path, content in generated_files.items():
         path = devcontainer_dir / relative_path
         path.write_text(content, encoding="utf-8")
@@ -360,12 +363,15 @@ def validate_generated_devcontainer(devcontainer_dir: Path, marker: dict[str, An
 
 
 def render_files(
-    host_ports: list[int], hidden_paths: list[str], gpu: dict[str, str]
+    host_ports: list[int],
+    masked_paths: list[str],
+    read_only_paths: list[str],
+    gpu: dict[str, str],
 ) -> dict[str, str]:
     return {
         "Dockerfile": DOCKERFILE_TEMPLATE,
         "devcontainer.json": json_text(
-            build_devcontainer_json(host_ports, hidden_paths, gpu)
+            build_devcontainer_json(host_ports, masked_paths, read_only_paths, gpu)
         ),
         "init-firewall.sh": FIREWALL_TEMPLATE,
     }
@@ -384,8 +390,12 @@ def build_marker(config: dict[str, Any], generated_files: dict[str, str]) -> dic
 
 
 def build_devcontainer_json(
-    host_ports: list[int], hidden_paths: list[str], gpu: dict[str, str]
+    host_ports: list[int],
+    masked_paths: list[str],
+    read_only_paths: list[str],
+    gpu: dict[str, str],
 ) -> dict[str, Any]:
+    validate_path_lists(masked_paths, read_only_paths)
     run_args: list[str] = [
         "--cap-add=SYS_ADMIN",
         "--cap-add=SYS_CHROOT",
@@ -446,7 +456,8 @@ def build_devcontainer_json(
             "source=claude-code-bashhistory-${devcontainerId},target=/commandhistory,type=volume",
             "source=claude-code-config-${devcontainerId},target=/home/node/.claude,type=volume",
             "source=codex-config-${devcontainerId},target=/home/node/.codex,type=volume",
-            *[hidden_mount(path) for path in hidden_paths],
+            *[masked_mount(path) for path in masked_paths],
+            *[read_only_mount(path) for path in read_only_paths],
         ],
         "containerEnv": {
             "NODE_OPTIONS": "--max-old-space-size=4096",
@@ -491,6 +502,37 @@ def config_list(
     return default[:]
 
 
+def config_masked_paths(config: dict[str, Any]) -> list[str]:
+    if "masked_paths" in config:
+        return normalize_workspace_paths(
+            config_list(config, "masked_paths", []), "Masked"
+        )
+    if "hidden_paths" in config:
+        hidden_paths = normalize_workspace_paths(
+            config_list(config, "hidden_paths", []), "Hidden"
+        )
+        default_read_only_paths = set(DEFAULT_READ_ONLY_PATHS)
+        return [path for path in hidden_paths if path not in default_read_only_paths]
+    return DEFAULT_MASKED_PATHS[:]
+
+
+def config_read_only_paths(config: dict[str, Any]) -> list[str]:
+    if "read_only_paths" in config:
+        return normalize_workspace_paths(
+            config_list(config, "read_only_paths", []), "Read-only"
+        )
+    if "hidden_paths" in config:
+        hidden_paths = normalize_workspace_paths(
+            config_list(config, "hidden_paths", []), "Hidden"
+        )
+        return [
+            path
+            for path in DEFAULT_READ_ONLY_PATHS
+            if path in hidden_paths
+        ]
+    return DEFAULT_READ_ONLY_PATHS[:]
+
+
 def config_gpu(config: dict[str, Any]) -> dict[str, str]:
     value = config.get("gpu")
     if isinstance(value, dict):
@@ -510,18 +552,32 @@ def prompt_host_ports(current: list[Any]) -> list[int]:
     return parse_host_ports(raw)
 
 
-def prompt_hidden_paths(current: list[Any]) -> list[str]:
-    normalized_current = normalize_hidden_paths(current)
+def prompt_masked_paths(current: list[Any]) -> list[str]:
+    normalized_current = normalize_workspace_paths(current, "Masked")
     default = ", ".join(normalized_current) or "none"
     raw = input(
-        "Workspace paths to hide from the container, comma-separated "
+        "Workspace paths to mask from the container, comma-separated "
         f"[{default}]: "
     ).strip()
     if not raw:
         return normalized_current
     if raw.lower() in {"none", "no", "-"}:
         return []
-    return normalize_hidden_paths(raw.split(","))
+    return normalize_workspace_paths(raw.split(","), "Masked")
+
+
+def prompt_read_only_paths(current: list[Any]) -> list[str]:
+    normalized_current = normalize_workspace_paths(current, "Read-only")
+    default = ", ".join(normalized_current) or "none"
+    raw = input(
+        "Workspace paths to mount read-only in the container, comma-separated "
+        f"[{default}]: "
+    ).strip()
+    if not raw:
+        return normalized_current
+    if raw.lower() in {"none", "no", "-"}:
+        return []
+    return normalize_workspace_paths(raw.split(","), "Read-only")
 
 
 def prompt_gpu(current: dict[str, str]) -> dict[str, str]:
@@ -569,7 +625,7 @@ def normalize_host_ports(values: list[Any]) -> list[int]:
     return sorted(set(ports))
 
 
-def normalize_hidden_paths(values: list[Any]) -> list[str]:
+def normalize_workspace_paths(values: list[Any], label: str) -> list[str]:
     normalized: list[str] = []
     seen: set[str] = set()
     for value in values:
@@ -580,16 +636,25 @@ def normalize_hidden_paths(values: list[Any]) -> list[str]:
         while path.startswith("./"):
             path = path[2:]
         if not path or path == ".":
-            raise ValueError("Hidden paths must be inside the workspace")
+            raise ValueError(f"{label} paths must be inside the workspace")
         parts = Path(path).parts
         if ".." in parts:
-            raise ValueError(f"Hidden path {value!r} must not contain '..'")
+            raise ValueError(f"{label} path {value!r} must not contain '..'")
         if "," in path:
-            raise ValueError(f"Hidden path {value!r} must not contain commas")
+            raise ValueError(f"{label} path {value!r} must not contain commas")
         if path not in seen:
             normalized.append(path)
             seen.add(path)
     return normalized
+
+
+def validate_path_lists(masked_paths: list[Any], read_only_paths: list[Any]) -> None:
+    masked = set(normalize_workspace_paths(masked_paths, "Masked"))
+    read_only = set(normalize_workspace_paths(read_only_paths, "Read-only"))
+    overlap = sorted(masked & read_only)
+    if overlap:
+        paths = ", ".join(overlap)
+        raise ValueError(f"Paths cannot be both masked and read-only: {paths}")
 
 
 def parse_gpu(raw: str) -> dict[str, str]:
@@ -652,8 +717,15 @@ def format_ports(ports: list[int]) -> str:
     return ",".join(str(port) for port in normalize_host_ports(ports))
 
 
-def hidden_mount(path: str) -> str:
+def masked_mount(path: str) -> str:
     return f"target=/workspace/{path},type=volume,volume-nocopy"
+
+
+def read_only_mount(path: str) -> str:
+    return (
+        f"source=${{localWorkspaceFolder}}/{path},"
+        f"target=/workspace/{path},type=bind,readonly"
+    )
 
 
 def sha256_text(content: str) -> str:

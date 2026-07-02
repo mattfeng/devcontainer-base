@@ -1,9 +1,11 @@
 {
-  "version": 1,
+  "version": 3,
   "host_ports": [],
-  "hidden_paths": [
+  "masked_paths": [
     ".jj",
-    ".git",
+    ".git"
+  ],
+  "read_only_paths": [
     ".devcontainer"
   ],
   "gpu": {

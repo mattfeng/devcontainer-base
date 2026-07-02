@@ -55,7 +55,8 @@
     "source=claude-code-config-${devcontainerId},target=/home/node/.claude,type=volume",
     "source=codex-config-${devcontainerId},target=/home/node/.codex,type=volume",
     "target=/workspace/.jj,type=volume,volume-nocopy",
-    "target=/workspace/.git,type=volume,volume-nocopy"
+    "target=/workspace/.git,type=volume,volume-nocopy",
+    "source=${localWorkspaceFolder}/.devcontainer,target=/workspace/.devcontainer,type=bind,readonly"
   ],
   "containerEnv": {
     "NODE_OPTIONS": "--max-old-space-size=4096",
