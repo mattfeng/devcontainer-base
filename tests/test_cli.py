@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -53,6 +54,30 @@ class DevcontainerMountTests(unittest.TestCase):
                 read_only_paths=["./config"],
                 gpu=cli.DEFAULT_GPU,
             )
+
+
+class MarkerFileTests(unittest.TestCase):
+    def test_marker_filename_describes_managed_file_hashes(self) -> None:
+        self.assertEqual(cli.MARKER_FILENAME, ".managed-file-hashes.json")
+
+    def test_find_marker_path_supports_legacy_marker_names(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            devcontainer_dir = Path(temp_dir)
+            legacy_names = [
+                ".devcontainer-configurator-managed-file-hashes.json",
+                ".codex-claude-devcontainer-configurator.json",
+            ]
+
+            for legacy_name in legacy_names:
+                legacy_marker_path = devcontainer_dir / legacy_name
+                legacy_marker_path.write_text("{}", encoding="utf-8")
+
+                self.assertEqual(
+                    cli.find_marker_path(devcontainer_dir),
+                    legacy_marker_path,
+                )
+
+                legacy_marker_path.unlink()
 
 
 if __name__ == "__main__":
