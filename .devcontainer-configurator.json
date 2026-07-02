@@ -3,7 +3,8 @@
   "host_ports": [],
   "hidden_paths": [
     ".jj",
-    ".git"
+    ".git",
+    ".devcontainer"
   ],
   "gpu": {
     "mode": "none",

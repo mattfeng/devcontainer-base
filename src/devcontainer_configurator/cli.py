@@ -17,7 +17,7 @@ ROOT_STATE_FILENAME = ".devcontainer-configurator.json"
 MARKER_FILENAME = ".codex-claude-devcontainer-configurator.json"
 MANAGED_FILES = ["Dockerfile", "devcontainer.json", "init-firewall.sh"]
 
-DEFAULT_HIDDEN_PATHS = [".jj", ".git"]
+DEFAULT_HIDDEN_PATHS = [".jj", ".git", ".devcontainer"]
 DEFAULT_HOST_PORTS: list[int] = []
 HOST_PORTS_ENV = "DEVCONTAINER_HOST_PORTS"
 HOST_GATEWAY_ARG = "--add-host=host.docker.internal:host-gateway"
