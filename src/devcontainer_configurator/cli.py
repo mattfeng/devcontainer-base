@@ -601,7 +601,13 @@ def prompt_host_ports(current: list[Any]) -> list[int]:
         "Host TCP ports",
         format_editor_list(str(port) for port in normalized_current),
     )
-    return parse_host_ports(raw) if raw.strip() else []
+    new_ports = parse_host_ports(raw) if raw.strip() else []
+    print_prompt_result(
+        "Host TCP ports",
+        format_ports(normalized_current) or "none",
+        format_ports(new_ports) or "none",
+    )
+    return new_ports
 
 
 def prompt_masked_paths(current: list[Any]) -> list[str]:
@@ -616,10 +622,17 @@ def prompt_masked_paths(current: list[Any]) -> list[str]:
         format_editor_list(normalized_current),
     ).strip()
     if not raw:
-        return []
-    if raw.lower() in {"none", "no", "-"}:
-        return []
-    return normalize_workspace_paths(split_editor_list(raw), "Masked")
+        new_paths: list[str] = []
+    elif raw.lower() in {"none", "no", "-"}:
+        new_paths = []
+    else:
+        new_paths = normalize_workspace_paths(split_editor_list(raw), "Masked")
+    print_prompt_result(
+        "Workspace paths to mask",
+        format_display_list(normalized_current),
+        format_display_list(new_paths),
+    )
+    return new_paths
 
 
 def prompt_read_only_paths(current: list[Any]) -> list[str]:
@@ -634,10 +647,17 @@ def prompt_read_only_paths(current: list[Any]) -> list[str]:
         format_editor_list(normalized_current),
     ).strip()
     if not raw:
-        return []
-    if raw.lower() in {"none", "no", "-"}:
-        return []
-    return normalize_workspace_paths(split_editor_list(raw), "Read-only")
+        new_paths = []
+    elif raw.lower() in {"none", "no", "-"}:
+        new_paths = []
+    else:
+        new_paths = normalize_workspace_paths(split_editor_list(raw), "Read-only")
+    print_prompt_result(
+        "Workspace paths to mount read-only",
+        format_display_list(normalized_current),
+        format_display_list(new_paths),
+    )
+    return new_paths
 
 
 def prompt_gpu(current: dict[str, str]) -> dict[str, str]:
@@ -651,7 +671,13 @@ def prompt_gpu(current: dict[str, str]) -> dict[str, str]:
         "GPU access",
         format_gpu(current) + "\n",
     ).strip()
-    return parse_gpu(raw) if raw else DEFAULT_GPU.copy()
+    new_gpu = parse_gpu(raw) if raw else DEFAULT_GPU.copy()
+    print_prompt_result(
+        "GPU access",
+        format_gpu(current),
+        format_gpu(new_gpu),
+    )
+    return new_gpu
 
 
 def prompt_change(question: str) -> bool:
@@ -664,6 +690,13 @@ def prompt_change(question: str) -> bool:
         if raw in {"n", "no"}:
             return False
         print("Please answer yes or no.")
+
+
+def print_prompt_result(label: str, old_value: str, new_value: str) -> None:
+    if old_value == new_value:
+        print(f"{label}: nothing changed.")
+        return
+    print(f"{label}: changed from {old_value} to {new_value}.")
 
 
 def edit_prompt_value(label: str, initial_text: str) -> str:

@@ -120,15 +120,22 @@ class PromptTests(unittest.TestCase):
         edit_prompt_value.assert_not_called()
 
     def test_prompt_can_clear_paths_with_blank_editor_content(self) -> None:
-        with patch("builtins.input", return_value="y"), patch.object(
+        with patch("builtins.input", return_value="y"), patch(
+            "builtins.print"
+        ) as print_mock, patch.object(
             cli,
             "edit_prompt_value",
             return_value="\n",
         ):
             self.assertEqual(cli.prompt_read_only_paths([".devcontainer"]), [])
+        print_mock.assert_called_once_with(
+            "Workspace paths to mount read-only: changed from .devcontainer to none."
+        )
 
     def test_prompt_accepts_line_or_comma_separated_editor_entries(self) -> None:
-        with patch("builtins.input", return_value="y"), patch.object(
+        with patch("builtins.input", return_value="y"), patch(
+            "builtins.print"
+        ) as print_mock, patch.object(
             cli,
             "edit_prompt_value",
             return_value=".git\n.env,private\n",
@@ -137,14 +144,47 @@ class PromptTests(unittest.TestCase):
                 cli.prompt_masked_paths([".git"]),
                 [".git", ".env", "private"],
             )
+        print_mock.assert_called_once_with(
+            "Workspace paths to mask: changed from .git to .git, .env, private."
+        )
 
     def test_prompt_can_clear_host_ports_with_blank_editor_content(self) -> None:
-        with patch("builtins.input", return_value="y"), patch.object(
+        with patch("builtins.input", return_value="y"), patch(
+            "builtins.print"
+        ) as print_mock, patch.object(
             cli,
             "edit_prompt_value",
             return_value="",
         ):
             self.assertEqual(cli.prompt_host_ports([3000, 5000]), [])
+        print_mock.assert_called_once_with(
+            "Host TCP ports: changed from 3000,5000 to none."
+        )
+
+    def test_prompt_reports_when_editor_content_does_not_change_value(self) -> None:
+        with patch("builtins.input", return_value="y"), patch(
+            "builtins.print"
+        ) as print_mock, patch.object(
+            cli,
+            "edit_prompt_value",
+            return_value=".git\n",
+        ):
+            self.assertEqual(cli.prompt_masked_paths([".git"]), [".git"])
+        print_mock.assert_called_once_with("Workspace paths to mask: nothing changed.")
+
+    def test_prompt_reports_gpu_change(self) -> None:
+        with patch("builtins.input", return_value="y"), patch(
+            "builtins.print"
+        ) as print_mock, patch.object(
+            cli,
+            "edit_prompt_value",
+            return_value="all\n",
+        ):
+            self.assertEqual(
+                cli.prompt_gpu({"mode": "device", "device": "0"}),
+                {"mode": "all", "device": ""},
+            )
+        print_mock.assert_called_once_with("GPU access: changed from device=0 to all.")
 
     def test_edit_prompt_value_seeds_editor_and_returns_saved_content(self) -> None:
         editor_script = (
