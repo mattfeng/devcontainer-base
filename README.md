@@ -32,6 +32,11 @@ The configurator prompts for:
 - Workspace paths to mount read-only in the container, defaulting to
   `.devcontainer`
 
+For each setting, the configurator shows the current value and asks whether to
+change it. If you choose to change it, it opens `$VISUAL` or `$EDITOR` with the
+current value already filled in, falling back to `nano` or `vi`. Save an empty
+file to clear list-style settings such as ports or workspace paths.
+
 The configurator creates `.devcontainer/Dockerfile`,
 `.devcontainer/devcontainer.json`, and `.devcontainer/init-firewall.sh`.
 It writes managed file hashes to

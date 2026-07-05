@@ -4,6 +4,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
@@ -106,6 +107,60 @@ class MarkerFileTests(unittest.TestCase):
                 )
 
                 legacy_marker_path.unlink()
+
+
+class PromptTests(unittest.TestCase):
+    def test_prompt_keeps_current_value_when_change_declined(self) -> None:
+        with patch("builtins.input", return_value="n"), patch.object(
+            cli,
+            "edit_prompt_value",
+        ) as edit_prompt_value:
+            self.assertEqual(cli.prompt_masked_paths([".git"]), [".git"])
+
+        edit_prompt_value.assert_not_called()
+
+    def test_prompt_can_clear_paths_with_blank_editor_content(self) -> None:
+        with patch("builtins.input", return_value="y"), patch.object(
+            cli,
+            "edit_prompt_value",
+            return_value="\n",
+        ):
+            self.assertEqual(cli.prompt_read_only_paths([".devcontainer"]), [])
+
+    def test_prompt_accepts_line_or_comma_separated_editor_entries(self) -> None:
+        with patch("builtins.input", return_value="y"), patch.object(
+            cli,
+            "edit_prompt_value",
+            return_value=".git\n.env,private\n",
+        ):
+            self.assertEqual(
+                cli.prompt_masked_paths([".git"]),
+                [".git", ".env", "private"],
+            )
+
+    def test_prompt_can_clear_host_ports_with_blank_editor_content(self) -> None:
+        with patch("builtins.input", return_value="y"), patch.object(
+            cli,
+            "edit_prompt_value",
+            return_value="",
+        ):
+            self.assertEqual(cli.prompt_host_ports([3000, 5000]), [])
+
+    def test_edit_prompt_value_seeds_editor_and_returns_saved_content(self) -> None:
+        editor_script = (
+            "from pathlib import Path; "
+            "import sys; "
+            "path = Path(sys.argv[1]); "
+            "assert path.read_text(encoding='utf-8') == 'old\\n'; "
+            "path.write_text('new\\n', encoding='utf-8')"
+        )
+
+        with patch.object(
+            cli,
+            "editor_command",
+            return_value=[sys.executable, "-c", editor_script],
+        ), patch("builtins.print"):
+            self.assertEqual(cli.edit_prompt_value("Example", "old\n"), "new\n")
 
 
 if __name__ == "__main__":

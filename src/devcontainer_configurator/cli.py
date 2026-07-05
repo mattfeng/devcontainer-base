@@ -5,7 +5,12 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
+import shlex
+import shutil
+import subprocess
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -587,51 +592,145 @@ def config_gpu(config: dict[str, Any]) -> dict[str, str]:
 
 def prompt_host_ports(current: list[Any]) -> list[int]:
     normalized_current = normalize_host_ports(current)
-    default = format_ports(normalized_current) or "none"
-    raw = input(
-        "Host TCP ports reachable from the container through "
-        f"host.docker.internal [{default}]: "
-    ).strip()
-    if not raw:
+    if not prompt_change(
+        "Change host TCP ports reachable from the container through "
+        f"host.docker.internal? Current: {format_ports(normalized_current) or 'none'}"
+    ):
         return normalized_current
-    return parse_host_ports(raw)
+    raw = edit_prompt_value(
+        "Host TCP ports",
+        format_editor_list(str(port) for port in normalized_current),
+    )
+    return parse_host_ports(raw) if raw.strip() else []
 
 
 def prompt_masked_paths(current: list[Any]) -> list[str]:
     normalized_current = normalize_workspace_paths(current, "Masked")
-    default = ", ".join(normalized_current) or "none"
-    raw = input(
-        "Workspace paths to mask from the container, comma-separated "
-        f"[{default}]: "
+    if not prompt_change(
+        "Change workspace paths to mask from the container? "
+        f"Current: {format_display_list(normalized_current)}"
+    ):
+        return normalized_current
+    raw = edit_prompt_value(
+        "Workspace paths to mask",
+        format_editor_list(normalized_current),
     ).strip()
     if not raw:
-        return normalized_current
+        return []
     if raw.lower() in {"none", "no", "-"}:
         return []
-    return normalize_workspace_paths(raw.split(","), "Masked")
+    return normalize_workspace_paths(split_editor_list(raw), "Masked")
 
 
 def prompt_read_only_paths(current: list[Any]) -> list[str]:
     normalized_current = normalize_workspace_paths(current, "Read-only")
-    default = ", ".join(normalized_current) or "none"
-    raw = input(
-        "Workspace paths to mount read-only in the container, comma-separated "
-        f"[{default}]: "
+    if not prompt_change(
+        "Change workspace paths to mount read-only in the container? "
+        f"Current: {format_display_list(normalized_current)}"
+    ):
+        return normalized_current
+    raw = edit_prompt_value(
+        "Workspace paths to mount read-only",
+        format_editor_list(normalized_current),
     ).strip()
     if not raw:
-        return normalized_current
+        return []
     if raw.lower() in {"none", "no", "-"}:
         return []
-    return normalize_workspace_paths(raw.split(","), "Read-only")
+    return normalize_workspace_paths(split_editor_list(raw), "Read-only")
 
 
 def prompt_gpu(current: dict[str, str]) -> dict[str, str]:
     current = normalize_gpu(current)
-    default = format_gpu(current)
-    raw = input(f"GPU access: none, all, or device number [{default}]: ").strip()
-    if not raw:
+    if not prompt_change(
+        "Change GPU access? "
+        f"Current: {format_gpu(current)}"
+    ):
         return current
-    return parse_gpu(raw)
+    raw = edit_prompt_value(
+        "GPU access",
+        format_gpu(current) + "\n",
+    ).strip()
+    return parse_gpu(raw) if raw else DEFAULT_GPU.copy()
+
+
+def prompt_change(question: str) -> bool:
+    while True:
+        raw = input(f"{question} [y/N]: ").strip().lower()
+        if not raw:
+            return False
+        if raw in {"y", "yes"}:
+            return True
+        if raw in {"n", "no"}:
+            return False
+        print("Please answer yes or no.")
+
+
+def edit_prompt_value(label: str, initial_text: str) -> str:
+    editor = editor_command()
+    if editor is None:
+        raise ValueError("No terminal editor found. Set VISUAL or EDITOR and rerun.")
+
+    temp_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            "w",
+            encoding="utf-8",
+            delete=False,
+            prefix=f"{editor_filename_label(label)}-",
+            suffix=".txt",
+        ) as temp_file:
+            temp_file.write(initial_text)
+            temp_path = Path(temp_file.name)
+
+        print(
+            f"Opening editor for {label}. "
+            "Save an empty file to clear the value."
+        )
+        result = subprocess.run([*editor, str(temp_path)], check=False)
+        if result.returncode != 0:
+            raise ValueError(
+                f"Editor exited with status {result.returncode}; no changes were written"
+            )
+        return temp_path.read_text(encoding="utf-8")
+    finally:
+        if temp_path is not None:
+            temp_path.unlink(missing_ok=True)
+
+
+def editor_command() -> list[str] | None:
+    for env_name in ("VISUAL", "EDITOR"):
+        configured_editor = os.environ.get(env_name)
+        if configured_editor:
+            command = shlex.split(configured_editor)
+            if command:
+                return command
+    for fallback in ("nano", "vi"):
+        if shutil.which(fallback):
+            return [fallback]
+    return None
+
+
+def editor_filename_label(label: str) -> str:
+    filename = re.sub(r"[^A-Za-z0-9_.-]+", "-", label.strip().lower()).strip("-")
+    return filename or "devcontainer-config"
+
+
+def format_display_list(values: list[str]) -> str:
+    return ", ".join(values) or "none"
+
+
+def format_editor_list(values: Any) -> str:
+    lines = [str(value) for value in values]
+    return "\n".join(lines) + ("\n" if lines else "")
+
+
+def split_editor_list(raw: str) -> list[str]:
+    return [
+        token
+        for token in re.split(r"[\n,]+", raw)
+        if token.strip()
+    ]
 
 
 def parse_host_ports(raw: str) -> list[int]:
