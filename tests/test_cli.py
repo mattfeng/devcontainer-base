@@ -13,6 +13,16 @@ from devcontainer_configurator import cli
 
 
 class DevcontainerMountTests(unittest.TestCase):
+    def test_generated_dockerfile_includes_postgres_client(self) -> None:
+        generated_files = cli.render_files(
+            host_ports=[],
+            masked_paths=[],
+            read_only_paths=[],
+            gpu=cli.DEFAULT_GPU,
+        )
+
+        self.assertIn("postgresql-client", generated_files["Dockerfile"])
+
     def test_build_devcontainer_uses_masked_and_read_only_mounts(self) -> None:
         devcontainer = cli.build_devcontainer_json(
             host_ports=[],

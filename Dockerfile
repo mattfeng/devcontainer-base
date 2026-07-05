@@ -33,6 +33,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   python3-venv \
   pipx \
   bubblewrap \
+  postgresql-client \
   && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # make sure bubblewrap can make unprivileged namespaces
