@@ -444,6 +444,16 @@ def build_devcontainer_json(
     masked_file_path_set = set(
         normalize_workspace_paths(masked_file_paths or [], "Masked file")
     )
+    container_env = {
+        "NODE_OPTIONS": "--max-old-space-size=4096",
+        "CLAUDE_CONFIG_DIR": "/home/node/.claude",
+        "CODEX_HOME": "/home/node/.codex",
+        "POWERLEVEL9K_DISABLE_GITSTATUS": "true",
+        HOST_PORTS_ENV: format_ports(host_ports),
+    }
+    if ".git" in normalized_read_only_paths:
+        container_env["GIT_OPTIONAL_LOCKS"] = "0"
+
     run_args: list[str] = [
         "--cap-add=SYS_ADMIN",
         "--cap-add=SYS_CHROOT",
@@ -510,13 +520,7 @@ def build_devcontainer_json(
             ],
             *[read_only_mount(path) for path in normalized_read_only_paths],
         ],
-        "containerEnv": {
-            "NODE_OPTIONS": "--max-old-space-size=4096",
-            "CLAUDE_CONFIG_DIR": "/home/node/.claude",
-            "CODEX_HOME": "/home/node/.codex",
-            "POWERLEVEL9K_DISABLE_GITSTATUS": "true",
-            HOST_PORTS_ENV: format_ports(host_ports),
-        },
+        "containerEnv": container_env,
         "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=delegated",
         "workspaceFolder": "/workspace",
         "postStartCommand": "sudo /usr/local/bin/init-firewall.sh",

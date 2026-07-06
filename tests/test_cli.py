@@ -49,6 +49,22 @@ class DevcontainerMountTests(unittest.TestCase):
             "target=/workspace/README.md,type=bind,readonly",
             mounts,
         )
+        self.assertNotIn("GIT_OPTIONAL_LOCKS", devcontainer["containerEnv"])
+
+    def test_read_only_git_disables_optional_locks(self) -> None:
+        devcontainer = cli.build_devcontainer_json(
+            host_ports=[],
+            masked_paths=[],
+            read_only_paths=["./.git"],
+            gpu=cli.DEFAULT_GPU,
+        )
+
+        self.assertEqual(devcontainer["containerEnv"]["GIT_OPTIONAL_LOCKS"], "0")
+        self.assertIn(
+            "source=${localWorkspaceFolder}/.git,"
+            "target=/workspace/.git,type=bind,readonly",
+            devcontainer["mounts"],
+        )
 
     def test_legacy_hidden_paths_migrate_default_devcontainer_to_read_only(self) -> None:
         config = {"hidden_paths": [".jj", ".git", ".devcontainer", "secret.txt"]}
