@@ -23,6 +23,42 @@ class DevcontainerMountTests(unittest.TestCase):
 
         self.assertIn("postgresql-client", generated_files["Dockerfile"])
 
+    def test_generated_devcontainer_installs_yarn_v4(self) -> None:
+        generated_files = cli.render_files(
+            host_ports=[],
+            masked_paths=[],
+            read_only_paths=[],
+            gpu=cli.DEFAULT_GPU,
+        )
+        devcontainer = cli.build_devcontainer_json(
+            host_ports=[],
+            masked_paths=[],
+            read_only_paths=[],
+            gpu=cli.DEFAULT_GPU,
+        )
+
+        self.assertIn("ARG YARN_VERSION=4", generated_files["Dockerfile"])
+        self.assertIn(
+            'corepack install --global "yarn@${YARN_VERSION}"',
+            generated_files["Dockerfile"],
+        )
+        self.assertEqual(devcontainer["build"]["args"]["YARN_VERSION"], "4")
+
+    def test_generated_dockerfile_installs_uv_for_node_user(self) -> None:
+        generated_files = cli.render_files(
+            host_ports=[],
+            masked_paths=[],
+            read_only_paths=[],
+            gpu=cli.DEFAULT_GPU,
+        )
+        dockerfile = generated_files["Dockerfile"]
+
+        self.assertLess(
+            dockerfile.index("USER node\n\nENV PATH=\"/home/node/.local/bin:${PATH}\""),
+            dockerfile.index("RUN pipx install uv"),
+        )
+        self.assertIn("RUN pipx install uv && \\\n  uv --version", dockerfile)
+
     def test_build_devcontainer_uses_masked_and_read_only_mounts(self) -> None:
         devcontainer = cli.build_devcontainer_json(
             host_ports=[],
@@ -65,6 +101,59 @@ class DevcontainerMountTests(unittest.TestCase):
             "target=/workspace/.git,type=bind,readonly",
             devcontainer["mounts"],
         )
+
+    def test_default_read_only_paths_include_existing_package_manager_files(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            for path in (
+                "package.json",
+                "package-lock.json",
+                "yarn.lock",
+                ".yarnrc.yml",
+                "pyproject.toml",
+                "uv.lock",
+            ):
+                (workspace / path).write_text("", encoding="utf-8")
+
+            self.assertEqual(
+                cli.config_read_only_paths({}, workspace),
+                [
+                    ".devcontainer",
+                    "package.json",
+                    "package-lock.json",
+                    "yarn.lock",
+                    ".yarnrc.yml",
+                    "pyproject.toml",
+                    "uv.lock",
+                ],
+            )
+
+    def test_old_default_read_only_config_gets_package_manager_files(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            (workspace / "pyproject.toml").write_text("", encoding="utf-8")
+            (workspace / "uv.lock").write_text("", encoding="utf-8")
+
+            self.assertEqual(
+                cli.config_read_only_paths(
+                    {"version": 3, "read_only_paths": [".devcontainer"]},
+                    workspace,
+                ),
+                [".devcontainer", "pyproject.toml", "uv.lock"],
+            )
+
+    def test_custom_read_only_paths_do_not_get_new_defaults(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            (workspace / "pyproject.toml").write_text("", encoding="utf-8")
+
+            self.assertEqual(
+                cli.config_read_only_paths(
+                    {"version": 3, "read_only_paths": []},
+                    workspace,
+                ),
+                [],
+            )
 
     def test_legacy_hidden_paths_migrate_default_devcontainer_to_read_only(self) -> None:
         config = {"hidden_paths": [".jj", ".git", ".devcontainer", "secret.txt"]}

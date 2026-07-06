@@ -5,7 +5,7 @@ ENV TZ="$TZ"
 
 ARG CLAUDE_CODE_VERSION=latest
 ARG CODEX_CLI_VERSION=latest
-ARG YARN_VERSION=stable
+ARG YARN_VERSION=4
 
 ENV COREPACK_HOME=/usr/local/share/corepack
 
@@ -49,8 +49,6 @@ RUN mkdir -p /usr/local/share/npm-global && \
 
 ARG USERNAME=node
 
-RUN pipx install uv
-
 # Persist bash history.
 RUN SNIPPET="export PROMPT_COMMAND='history -a' && export HISTFILE=/commandhistory/.bash_history" \
   && mkdir /commandhistory \
@@ -80,6 +78,9 @@ ENV PATH="/home/node/.local/bin:${PATH}"
 # Install global packages
 ENV NPM_CONFIG_PREFIX=/usr/local/share/npm-global
 ENV PATH=$PATH:/usr/local/share/npm-global/bin
+
+RUN pipx install uv && \
+  uv --version
 
 # Set the default shell to zsh rather than sh
 ENV SHELL=/bin/zsh

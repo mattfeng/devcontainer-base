@@ -6,6 +6,7 @@
       "TZ": "${localEnv:TZ:America/New_York}",
       "CLAUDE_CODE_VERSION": "latest",
       "CODEX_CLI_VERSION": "latest",
+      "YARN_VERSION": "4",
       "GIT_DELTA_VERSION": "0.18.2",
       "ZSH_IN_DOCKER_VERSION": "1.2.0"
     }
@@ -56,7 +57,9 @@
     "source=codex-config-${devcontainerId},target=/home/node/.codex,type=volume",
     "target=/workspace/.jj,type=volume,volume-nocopy",
     "target=/workspace/.git,type=volume,volume-nocopy",
-    "source=${localWorkspaceFolder}/.devcontainer,target=/workspace/.devcontainer,type=bind,readonly"
+    "source=${localWorkspaceFolder}/.devcontainer,target=/workspace/.devcontainer,type=bind,readonly",
+    "source=${localWorkspaceFolder}/pyproject.toml,target=/workspace/pyproject.toml,type=bind,readonly",
+    "source=${localWorkspaceFolder}/uv.lock,target=/workspace/uv.lock,type=bind,readonly"
   ],
   "containerEnv": {
     "NODE_OPTIONS": "--max-old-space-size=4096",

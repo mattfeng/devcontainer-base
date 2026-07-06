@@ -16,7 +16,7 @@ from typing import Any
 
 
 TOOL_NAME = "codex-claude-devcontainer-configurator"
-CONFIG_VERSION = 3
+CONFIG_VERSION = 4
 DEVCONTAINER_DIRNAME = ".devcontainer"
 ROOT_STATE_FILENAME = ".devcontainer-configurator.json"
 MARKER_FILENAME = ".managed-file-hashes.json"
@@ -29,6 +29,15 @@ MASKED_FILE_PLACEHOLDER = ".empty-mask"
 
 DEFAULT_MASKED_PATHS = [".jj", ".git"]
 DEFAULT_READ_ONLY_PATHS = [".devcontainer"]
+PACKAGE_MANAGER_READ_ONLY_PATHS = [
+    "package.json",
+    "package-lock.json",
+    "npm-shrinkwrap.json",
+    "yarn.lock",
+    ".yarnrc.yml",
+    "pyproject.toml",
+    "uv.lock",
+]
 DEFAULT_HOST_PORTS: list[int] = []
 HOST_PORTS_ENV = "DEVCONTAINER_HOST_PORTS"
 HOST_GATEWAY_ARG = "--add-host=host.docker.internal:host-gateway"
@@ -44,7 +53,7 @@ ENV TZ="$TZ"
 
 ARG CLAUDE_CODE_VERSION=latest
 ARG CODEX_CLI_VERSION=latest
-ARG YARN_VERSION=stable
+ARG YARN_VERSION=4
 
 ENV COREPACK_HOME=/usr/local/share/corepack
 
@@ -85,8 +94,6 @@ RUN mkdir -p /usr/local/share/npm-global && \\
 
 ARG USERNAME=node
 
-RUN pipx install uv
-
 RUN SNIPPET="export PROMPT_COMMAND='history -a' && export HISTFILE=/commandhistory/.bash_history" \\
   && mkdir /commandhistory \\
   && touch /commandhistory/.bash_history \\
@@ -111,6 +118,9 @@ ENV PATH="/home/node/.local/bin:${PATH}"
 
 ENV NPM_CONFIG_PREFIX=/usr/local/share/npm-global
 ENV PATH=$PATH:/usr/local/share/npm-global/bin
+
+RUN pipx install uv && \\
+  uv --version
 
 ENV SHELL=/bin/zsh
 ENV EDITOR=nano
@@ -318,7 +328,7 @@ def configure(workspace: Path) -> int:
 
     current_host_ports = config_list(prior_config, "host_ports", DEFAULT_HOST_PORTS)
     current_masked_paths = config_masked_paths(prior_config)
-    current_read_only_paths = config_read_only_paths(prior_config)
+    current_read_only_paths = config_read_only_paths(prior_config, workspace)
     current_gpu = config_gpu(prior_config)
 
     host_ports = prompt_host_ports(current_host_ports)
@@ -477,6 +487,7 @@ def build_devcontainer_json(
                 "TZ": "${localEnv:TZ:America/New_York}",
                 "CLAUDE_CODE_VERSION": "latest",
                 "CODEX_CLI_VERSION": "latest",
+                "YARN_VERSION": "4",
                 "GIT_DELTA_VERSION": "0.18.2",
                 "ZSH_IN_DOCKER_VERSION": "1.2.0",
             },
@@ -571,11 +582,20 @@ def config_masked_paths(config: dict[str, Any]) -> list[str]:
     return DEFAULT_MASKED_PATHS[:]
 
 
-def config_read_only_paths(config: dict[str, Any]) -> list[str]:
+def config_read_only_paths(
+    config: dict[str, Any],
+    workspace: Path | None = None,
+) -> list[str]:
     if "read_only_paths" in config:
-        return normalize_workspace_paths(
+        read_only_paths = normalize_workspace_paths(
             config_list(config, "read_only_paths", []), "Read-only"
         )
+        if should_extend_default_read_only_paths(config, read_only_paths):
+            return merge_workspace_paths(
+                read_only_paths,
+                existing_package_manager_read_only_paths(workspace),
+            )
+        return read_only_paths
     if "hidden_paths" in config:
         hidden_paths = normalize_workspace_paths(
             config_list(config, "hidden_paths", []), "Hidden"
@@ -585,7 +605,34 @@ def config_read_only_paths(config: dict[str, Any]) -> list[str]:
             for path in DEFAULT_READ_ONLY_PATHS
             if path in hidden_paths
         ]
-    return DEFAULT_READ_ONLY_PATHS[:]
+    return default_read_only_paths(workspace)
+
+
+def should_extend_default_read_only_paths(
+    config: dict[str, Any],
+    read_only_paths: list[str],
+) -> bool:
+    version = config.get("version")
+    if isinstance(version, int) and version >= CONFIG_VERSION:
+        return False
+    return read_only_paths == DEFAULT_READ_ONLY_PATHS
+
+
+def default_read_only_paths(workspace: Path | None = None) -> list[str]:
+    return merge_workspace_paths(
+        DEFAULT_READ_ONLY_PATHS,
+        existing_package_manager_read_only_paths(workspace),
+    )
+
+
+def existing_package_manager_read_only_paths(workspace: Path | None) -> list[str]:
+    if workspace is None:
+        return PACKAGE_MANAGER_READ_ONLY_PATHS[:]
+    return [
+        path
+        for path in PACKAGE_MANAGER_READ_ONLY_PATHS
+        if (workspace / path).is_file()
+    ]
 
 
 def config_gpu(config: dict[str, Any]) -> dict[str, str]:
@@ -828,6 +875,17 @@ def normalize_workspace_paths(values: list[Any], label: str) -> list[str]:
             normalized.append(path)
             seen.add(path)
     return normalized
+
+
+def merge_workspace_paths(*path_lists: list[str]) -> list[str]:
+    merged: list[str] = []
+    seen: set[str] = set()
+    for paths in path_lists:
+        for path in normalize_workspace_paths(paths, "Workspace"):
+            if path not in seen:
+                merged.append(path)
+                seen.add(path)
+    return merged
 
 
 def validate_path_lists(masked_paths: list[Any], read_only_paths: list[Any]) -> None:

@@ -30,7 +30,7 @@ The configurator prompts for:
 - Host TCP ports the container can reach through `host.docker.internal`
 - Workspace paths to mask from the container, defaulting to `.jj` and `.git`
 - Workspace paths to mount read-only in the container, defaulting to
-  `.devcontainer`
+  `.devcontainer` plus existing npm, Yarn, and uv manifest/lock files
 
 For each setting, the configurator shows the current value and asks whether to
 change it. If you choose to change it, it opens `$VISUAL` or `$EDITOR` with the
