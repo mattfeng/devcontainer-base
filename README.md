@@ -30,12 +30,16 @@ The configurator prompts for:
 - Host TCP ports the container can reach through `host.docker.internal`
 - Workspace paths to mask from the container, defaulting to `.jj` and `.git`
 - Workspace paths to mount read-only in the container, defaulting to
-  `.devcontainer`
+  `.devcontainer` plus detected npm, Yarn, and uv manifest/lock files under the
+  workspace. The scan skips dependency and generated directories such as
+  `node_modules`.
 
 For each setting, the configurator shows the current value and asks whether to
 change it. If you choose to change it, it opens `$VISUAL` or `$EDITOR` with the
 current value already filled in, falling back to `nano` or `vi`. Save an empty
 file to clear list-style settings such as ports or workspace paths.
+On reruns, the configurator scans again for newly added manifest/lock files and
+asks whether to edit and append them to the read-only mounts.
 
 The configurator creates `.devcontainer/Dockerfile`,
 `.devcontainer/devcontainer.json`, and `.devcontainer/init-firewall.sh`.
