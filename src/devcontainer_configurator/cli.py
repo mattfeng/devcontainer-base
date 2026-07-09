@@ -29,15 +29,6 @@ MASKED_FILE_PLACEHOLDER = ".empty-mask"
 
 DEFAULT_MASKED_PATHS = [".jj", ".git"]
 DEFAULT_READ_ONLY_PATHS = [".devcontainer"]
-PACKAGE_MANAGER_READ_ONLY_PATHS = [
-    "package.json",
-    "package-lock.json",
-    "npm-shrinkwrap.json",
-    "yarn.lock",
-    ".yarnrc.yml",
-    "pyproject.toml",
-    "uv.lock",
-]
 DEFAULT_HOST_PORTS: list[int] = []
 HOST_PORTS_ENV = "DEVCONTAINER_HOST_PORTS"
 HOST_GATEWAY_ARG = "--add-host=host.docker.internal:host-gateway"
@@ -328,7 +319,7 @@ def configure(workspace: Path) -> int:
 
     current_host_ports = config_list(prior_config, "host_ports", DEFAULT_HOST_PORTS)
     current_masked_paths = config_masked_paths(prior_config)
-    current_read_only_paths = config_read_only_paths(prior_config, workspace)
+    current_read_only_paths = config_read_only_paths(prior_config)
     current_gpu = config_gpu(prior_config)
 
     host_ports = prompt_host_ports(current_host_ports)
@@ -582,19 +573,13 @@ def config_masked_paths(config: dict[str, Any]) -> list[str]:
     return DEFAULT_MASKED_PATHS[:]
 
 
-def config_read_only_paths(
-    config: dict[str, Any],
-    workspace: Path | None = None,
-) -> list[str]:
+def config_read_only_paths(config: dict[str, Any]) -> list[str]:
     if "read_only_paths" in config:
         read_only_paths = normalize_workspace_paths(
             config_list(config, "read_only_paths", []), "Read-only"
         )
         if should_extend_default_read_only_paths(config, read_only_paths):
-            return merge_workspace_paths(
-                read_only_paths,
-                existing_package_manager_read_only_paths(workspace),
-            )
+            return default_read_only_paths()
         return read_only_paths
     if "hidden_paths" in config:
         hidden_paths = normalize_workspace_paths(
@@ -605,7 +590,7 @@ def config_read_only_paths(
             for path in DEFAULT_READ_ONLY_PATHS
             if path in hidden_paths
         ]
-    return default_read_only_paths(workspace)
+    return default_read_only_paths()
 
 
 def should_extend_default_read_only_paths(
@@ -618,21 +603,8 @@ def should_extend_default_read_only_paths(
     return read_only_paths == DEFAULT_READ_ONLY_PATHS
 
 
-def default_read_only_paths(workspace: Path | None = None) -> list[str]:
-    return merge_workspace_paths(
-        DEFAULT_READ_ONLY_PATHS,
-        existing_package_manager_read_only_paths(workspace),
-    )
-
-
-def existing_package_manager_read_only_paths(workspace: Path | None) -> list[str]:
-    if workspace is None:
-        return PACKAGE_MANAGER_READ_ONLY_PATHS[:]
-    return [
-        path
-        for path in PACKAGE_MANAGER_READ_ONLY_PATHS
-        if (workspace / path).is_file()
-    ]
+def default_read_only_paths() -> list[str]:
+    return DEFAULT_READ_ONLY_PATHS[:]
 
 
 def config_gpu(config: dict[str, Any]) -> dict[str, str]:

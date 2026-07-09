@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 import tempfile
 import unittest
@@ -102,7 +103,7 @@ class DevcontainerMountTests(unittest.TestCase):
             devcontainer["mounts"],
         )
 
-    def test_default_read_only_paths_include_existing_package_manager_files(self) -> None:
+    def test_default_read_only_paths_do_not_depend_on_workspace_files(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             workspace = Path(temp_dir)
             for path in (
@@ -115,45 +116,31 @@ class DevcontainerMountTests(unittest.TestCase):
             ):
                 (workspace / path).write_text("", encoding="utf-8")
 
-            self.assertEqual(
-                cli.config_read_only_paths({}, workspace),
-                [
-                    ".devcontainer",
-                    "package.json",
-                    "package-lock.json",
-                    "yarn.lock",
-                    ".yarnrc.yml",
-                    "pyproject.toml",
-                    "uv.lock",
-                ],
-            )
+            self.assertEqual(cli.config_read_only_paths({}), [".devcontainer"])
 
-    def test_old_default_read_only_config_gets_package_manager_files(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            workspace = Path(temp_dir)
-            (workspace / "pyproject.toml").write_text("", encoding="utf-8")
-            (workspace / "uv.lock").write_text("", encoding="utf-8")
+    def test_old_default_read_only_config_stays_on_standard_defaults(self) -> None:
+        self.assertEqual(
+            cli.config_read_only_paths(
+                {"version": 3, "read_only_paths": [".devcontainer"]},
+            ),
+            [".devcontainer"],
+        )
 
-            self.assertEqual(
-                cli.config_read_only_paths(
-                    {"version": 3, "read_only_paths": [".devcontainer"]},
-                    workspace,
-                ),
-                [".devcontainer", "pyproject.toml", "uv.lock"],
-            )
+    def test_saved_read_only_paths_are_reused(self) -> None:
+        self.assertEqual(
+            cli.config_read_only_paths(
+                {"version": cli.CONFIG_VERSION, "read_only_paths": ["README.md"]},
+            ),
+            ["README.md"],
+        )
 
     def test_custom_read_only_paths_do_not_get_new_defaults(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            workspace = Path(temp_dir)
-            (workspace / "pyproject.toml").write_text("", encoding="utf-8")
-
-            self.assertEqual(
-                cli.config_read_only_paths(
-                    {"version": 3, "read_only_paths": []},
-                    workspace,
-                ),
-                [],
-            )
+        self.assertEqual(
+            cli.config_read_only_paths(
+                {"version": 3, "read_only_paths": []},
+            ),
+            [],
+        )
 
     def test_legacy_hidden_paths_migrate_default_devcontainer_to_read_only(self) -> None:
         config = {"hidden_paths": [".jj", ".git", ".devcontainer", "secret.txt"]}
@@ -198,6 +185,31 @@ class DevcontainerMountTests(unittest.TestCase):
 
         self.assertIn(cli.MASKED_FILE_PLACEHOLDER, generated_files)
         self.assertEqual(generated_files[cli.MASKED_FILE_PLACEHOLDER], "")
+
+    def test_configure_loads_saved_responses_on_rerun(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            saved_config = {
+                "version": cli.CONFIG_VERSION,
+                "host_ports": [5432],
+                "masked_paths": [".env"],
+                "read_only_paths": ["README.md"],
+                "gpu": {"mode": "all", "device": ""},
+            }
+            (workspace / cli.ROOT_STATE_FILENAME).write_text(
+                json.dumps(saved_config),
+                encoding="utf-8",
+            )
+            (workspace / "package.json").write_text("{}", encoding="utf-8")
+            (workspace / "uv.lock").write_text("", encoding="utf-8")
+
+            with patch("builtins.input", return_value="n"), patch("builtins.print"):
+                self.assertEqual(cli.configure(workspace), 0)
+
+            remembered_config = json.loads(
+                (workspace / cli.ROOT_STATE_FILENAME).read_text(encoding="utf-8")
+            )
+            self.assertEqual(remembered_config, saved_config)
 
 
 class MarkerFileTests(unittest.TestCase):
