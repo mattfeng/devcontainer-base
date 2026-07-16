@@ -60,6 +60,34 @@ class DevcontainerMountTests(unittest.TestCase):
         )
         self.assertIn("RUN pipx install uv && \\\n  uv --version", dockerfile)
 
+    def test_firewall_sudo_command_receives_host_ports_env(self) -> None:
+        generated_files = cli.render_files(
+            host_ports=[3000, 5432],
+            masked_paths=[],
+            read_only_paths=[],
+            gpu=cli.DEFAULT_GPU,
+        )
+        devcontainer = cli.build_devcontainer_json(
+            host_ports=[3000, 5432],
+            masked_paths=[],
+            read_only_paths=[],
+            gpu=cli.DEFAULT_GPU,
+        )
+
+        self.assertIn(
+            "NOPASSWD: SETENV: /usr/local/bin/init-firewall.sh",
+            generated_files["Dockerfile"],
+        )
+        self.assertEqual(
+            devcontainer["postStartCommand"],
+            'sudo DEVCONTAINER_HOST_PORTS="${DEVCONTAINER_HOST_PORTS:-}" '
+            "/usr/local/bin/init-firewall.sh",
+        )
+        self.assertEqual(
+            devcontainer["containerEnv"][cli.HOST_PORTS_ENV],
+            "3000,5432",
+        )
+
     def test_build_devcontainer_uses_masked_and_read_only_mounts(self) -> None:
         devcontainer = cli.build_devcontainer_json(
             host_ports=[],
