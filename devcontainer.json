@@ -59,14 +59,16 @@
     "target=/workspace/.git,type=volume,volume-nocopy",
     "source=${localWorkspaceFolder}/.devcontainer,target=/workspace/.devcontainer,type=bind,readonly",
     "source=${localWorkspaceFolder}/pyproject.toml,target=/workspace/pyproject.toml,type=bind,readonly",
-    "source=${localWorkspaceFolder}/uv.lock,target=/workspace/uv.lock,type=bind,readonly"
+    "source=${localWorkspaceFolder}/uv.lock,target=/workspace/uv.lock,type=bind,readonly",
+    "source=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind"
   ],
   "containerEnv": {
     "NODE_OPTIONS": "--max-old-space-size=4096",
     "CLAUDE_CONFIG_DIR": "/home/node/.claude",
     "CODEX_HOME": "/home/node/.codex",
     "POWERLEVEL9K_DISABLE_GITSTATUS": "true",
-    "DEVCONTAINER_HOST_PORTS": ""
+    "DEVCONTAINER_HOST_PORTS": "",
+    "DISPLAY": "${localEnv:DISPLAY}"
   },
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=delegated",
   "workspaceFolder": "/workspace",
