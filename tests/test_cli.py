@@ -60,32 +60,6 @@ class DevcontainerMountTests(unittest.TestCase):
         )
         self.assertIn("RUN pipx install uv && \\\n  uv --version", dockerfile)
 
-    def test_generated_devcontainer_installs_tformula(self) -> None:
-        generated_files = cli.render_files(
-            host_ports=[],
-            masked_paths=[],
-            read_only_paths=[],
-            gpu=cli.DEFAULT_GPU,
-        )
-        devcontainer = cli.build_devcontainer_json(
-            host_ports=[],
-            masked_paths=[],
-            read_only_paths=[],
-            gpu=cli.DEFAULT_GPU,
-        )
-
-        self.assertIn("ARG TFORMULA_VERSION=latest", generated_files["Dockerfile"])
-        self.assertIn(
-            "RUN npm install -g tformula@${TFORMULA_VERSION} \\\n"
-            "  --allow-scripts=node-pty \\\n"
-            "  --allow-scripts=sharp",
-            generated_files["Dockerfile"],
-        )
-        self.assertEqual(
-            devcontainer["build"]["args"]["TFORMULA_VERSION"],
-            "latest",
-        )
-
     def test_firewall_sudo_command_receives_host_ports_env(self) -> None:
         generated_files = cli.render_files(
             host_ports=[3000, 5432],

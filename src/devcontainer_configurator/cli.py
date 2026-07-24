@@ -68,7 +68,6 @@ ENV TZ="$TZ"
 
 ARG CLAUDE_CODE_VERSION=latest
 ARG CODEX_CLI_VERSION=latest
-ARG TFORMULA_VERSION=latest
 ARG YARN_VERSION=4
 
 ENV COREPACK_HOME=/usr/local/share/corepack
@@ -153,9 +152,6 @@ RUN sh -c "$(wget -O- https://github.com/deluan/zsh-in-docker/releases/download/
 
 RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}
 RUN npm install -g @openai/codex@${CODEX_CLI_VERSION}
-RUN npm install -g tformula@${TFORMULA_VERSION} \\
-  --allow-scripts=node-pty \\
-  --allow-scripts=sharp
 
 COPY init-firewall.sh /usr/local/bin/
 USER root
@@ -517,7 +513,6 @@ def build_devcontainer_json(
                 "TZ": "${localEnv:TZ:America/New_York}",
                 "CLAUDE_CODE_VERSION": "latest",
                 "CODEX_CLI_VERSION": "latest",
-                "TFORMULA_VERSION": "latest",
                 "YARN_VERSION": "4",
                 "GIT_DELTA_VERSION": "0.18.2",
                 "ZSH_IN_DOCKER_VERSION": "1.2.0",

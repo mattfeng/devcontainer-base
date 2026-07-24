@@ -38,7 +38,7 @@ iptables -A INPUT -i lo -j ACCEPT
 iptables -A OUTPUT -o lo -j ACCEPT
 
 # Create ipset with CIDR support
-ipset create allowed-domains hash:net
+ipset create allowed-domains hash:net -exist
 
 # Fetch GitHub meta information and aggregate + add their IP ranges
 echo "Fetching GitHub IP ranges..."
@@ -60,11 +60,17 @@ while read -r cidr; do
         exit 1
     fi
     echo "Adding GitHub range $cidr"
-    ipset add allowed-domains "$cidr"
+    ipset add allowed-domains "$cidr" -exist
 done < <(echo "$gh_ranges" | jq -r '(.web + .api + .git)[]' | aggregate -q)
 
 # Resolve and add other allowed domains
 for domain in \
+    "archive.ubuntu.com" \
+    "security.ubuntu.com" \
+    "sh.rustup.rs" \
+    "static.rust-lang.org" \
+    "index.crates.io" \
+    "static.crates.io" \
     "registry.npmjs.org" \
     "api.anthropic.com" \
     "api.openai.com" \
@@ -88,7 +94,7 @@ for domain in \
             exit 1
         fi
         echo "Adding $ip for $domain"
-        ipset add allowed-domains "$ip"
+        ipset add allowed-domains "$ip" -exist
     done < <(echo "$ips")
 done
 
