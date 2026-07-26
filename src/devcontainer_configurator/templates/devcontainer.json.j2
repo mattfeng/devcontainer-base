@@ -2,6 +2,7 @@
   "name": "Claude Code/Codex Sandbox",
   "build": {
     "dockerfile": "Dockerfile",
+    "context": ".",
     "args": {
       "TZ": "${localEnv:TZ:America/New_York}",
       "CLAUDE_CODE_VERSION": "latest",
@@ -21,7 +22,9 @@
     "--security-opt=apparmor=unconfined",
     "--cap-add=NET_ADMIN",
     "--cap-add=NET_RAW",
-    "--add-host=host.docker.internal:host-gateway"
+    "--add-host=host.docker.internal:host-gateway"{% if gpu.mode == "all" %},
+    "--gpus=all"{% elif gpu.mode == "device" %},
+    {{ ("--gpus=device=" ~ gpu.device) | tojson }}{% endif %}
   ],
   "customizations": {
     "vscode": {
@@ -54,21 +57,27 @@
   "mounts": [
     "source=claude-code-bashhistory-${devcontainerId},target=/commandhistory,type=volume",
     "source=claude-code-config-${devcontainerId},target=/home/node/.claude,type=volume",
-    "source=codex-config-${devcontainerId},target=/home/node/.codex,type=volume",
-    "target=/workspace/.jj,type=volume,volume-nocopy",
-    "target=/workspace/.git,type=volume,volume-nocopy",
-    "source=${localWorkspaceFolder}/.devcontainer,target=/workspace/.devcontainer,type=bind,readonly",
-    "source=${localWorkspaceFolder}/pyproject.toml,target=/workspace/pyproject.toml,type=bind,readonly",
-    "source=${localWorkspaceFolder}/uv.lock,target=/workspace/uv.lock,type=bind,readonly",
-    "source=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind"
+    "source=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind",
+    "source=codex-config-${devcontainerId},target=/home/node/.codex,type=volume"{% for path in masked_paths %},
+    {{ (
+      "source=${localWorkspaceFolder}/.devcontainer/" ~ masked_file_placeholder
+      ~ ",target=/workspace/" ~ path ~ ",type=bind,readonly"
+      if path in masked_file_paths
+      else "target=/workspace/" ~ path ~ ",type=volume,volume-nocopy"
+    ) | tojson }}{% endfor %}{% for path in read_only_paths %},
+    {{ (
+      "source=${localWorkspaceFolder}/" ~ path
+      ~ ",target=/workspace/" ~ path ~ ",type=bind,readonly"
+    ) | tojson }}{% endfor %}
   ],
   "containerEnv": {
+    "DISPLAY": "${localEnv:DISPLAY}",
     "NODE_OPTIONS": "--max-old-space-size=4096",
     "CLAUDE_CONFIG_DIR": "/home/node/.claude",
     "CODEX_HOME": "/home/node/.codex",
     "POWERLEVEL9K_DISABLE_GITSTATUS": "true",
-    "DEVCONTAINER_HOST_PORTS": "",
-    "DISPLAY": "${localEnv:DISPLAY}"
+    "DEVCONTAINER_HOST_PORTS": {{ host_ports | tojson }}{% if git_read_only %},
+    "GIT_OPTIONAL_LOCKS": "0"{% endif %}
   },
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=delegated",
   "workspaceFolder": "/workspace",

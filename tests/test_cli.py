@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import sys
 import tempfile
 import unittest
@@ -11,6 +12,36 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from devcontainer_configurator import cli
+
+
+class TemplateFileTests(unittest.TestCase):
+    def test_all_generated_configuration_files_have_jinja_templates(self) -> None:
+        self.assertEqual(
+            set(cli.TEMPLATE_NAMES),
+            {
+                "Dockerfile.j2",
+                "devcontainer.json.j2",
+                "init-firewall.sh.j2",
+            },
+        )
+        for template_name in cli.TEMPLATE_NAMES:
+            self.assertTrue((cli.TEMPLATE_DIRECTORY / template_name).is_file())
+
+    def test_static_files_are_rendered_from_their_jinja_templates(self) -> None:
+        generated_files = cli.render_files([], [], [], cli.DEFAULT_GPU)
+
+        self.assertEqual(
+            generated_files["Dockerfile"],
+            (cli.TEMPLATE_DIRECTORY / cli.DOCKERFILE_TEMPLATE_NAME).read_text(
+                encoding="utf-8"
+            ),
+        )
+        self.assertEqual(
+            generated_files["init-firewall.sh"],
+            (cli.TEMPLATE_DIRECTORY / cli.FIREWALL_TEMPLATE_NAME).read_text(
+                encoding="utf-8"
+            ),
+        )
 
 
 class DevcontainerMountTests(unittest.TestCase):
@@ -296,10 +327,173 @@ class DevcontainerMountTests(unittest.TestCase):
                 ["app/package.json"],
             )
 
+    def test_configure_upgrades_changed_template_when_accepted(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+
+            with patch("builtins.input", return_value="n"), patch("builtins.print"):
+                self.assertEqual(cli.configure(workspace), 0)
+
+            state_before = (workspace / cli.ROOT_STATE_FILENAME).read_text(
+                encoding="utf-8"
+            )
+            template_directory = workspace / "test-templates"
+            shutil.copytree(cli.TEMPLATE_DIRECTORY, template_directory)
+            dockerfile_template = (
+                template_directory / cli.DOCKERFILE_TEMPLATE_NAME
+            )
+            dockerfile_template.write_text(
+                dockerfile_template.read_text(encoding="utf-8")
+                + "\n# New template content.\n",
+                encoding="utf-8",
+            )
+            with patch.object(
+                cli,
+                "TEMPLATE_DIRECTORY",
+                template_directory,
+            ), patch(
+                "builtins.input",
+                side_effect=["y", "n", "n", "n", "n"],
+            ) as input_mock, patch(
+                "builtins.print"
+            ):
+                self.assertEqual(cli.configure(workspace), 0)
+                marker = json.loads(
+                    (
+                        workspace
+                        / cli.DEVCONTAINER_DIRNAME
+                        / cli.MARKER_FILENAME
+                    ).read_text(encoding="utf-8")
+                )
+                self.assertEqual(
+                    marker[cli.TEMPLATE_FINGERPRINT_KEY],
+                    cli.template_fingerprint(),
+                )
+
+            self.assertIn(
+                "# New template content.",
+                (
+                    workspace / cli.DEVCONTAINER_DIRNAME / "Dockerfile"
+                ).read_text(encoding="utf-8"),
+            )
+            self.assertEqual(
+                (workspace / cli.ROOT_STATE_FILENAME).read_text(encoding="utf-8"),
+                state_before,
+            )
+            self.assertIn(
+                "template has changed",
+                input_mock.call_args_list[0].args[0],
+            )
+
+    def test_configure_leaves_files_unchanged_when_upgrade_declined(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+
+            with patch("builtins.input", return_value="n"), patch("builtins.print"):
+                self.assertEqual(cli.configure(workspace), 0)
+
+            devcontainer_dir = workspace / cli.DEVCONTAINER_DIRNAME
+            files_before = {
+                path.name: path.read_bytes()
+                for path in devcontainer_dir.iterdir()
+                if path.is_file()
+            }
+            state_before = (workspace / cli.ROOT_STATE_FILENAME).read_bytes()
+
+            template_directory = workspace / "test-templates"
+            shutil.copytree(cli.TEMPLATE_DIRECTORY, template_directory)
+            dockerfile_template = (
+                template_directory / cli.DOCKERFILE_TEMPLATE_NAME
+            )
+            dockerfile_template.write_text(
+                dockerfile_template.read_text(encoding="utf-8")
+                + "\n# New template content.\n",
+                encoding="utf-8",
+            )
+            with patch.object(
+                cli,
+                "TEMPLATE_DIRECTORY",
+                template_directory,
+            ), patch(
+                "builtins.input",
+                return_value="n",
+            ) as input_mock, patch(
+                "builtins.print"
+            ):
+                self.assertEqual(cli.configure(workspace), 0)
+
+            self.assertEqual(
+                {
+                    path.name: path.read_bytes()
+                    for path in devcontainer_dir.iterdir()
+                    if path.is_file()
+                },
+                files_before,
+            )
+            self.assertEqual(
+                (workspace / cli.ROOT_STATE_FILENAME).read_bytes(),
+                state_before,
+            )
+            input_mock.assert_called_once()
+
 
 class MarkerFileTests(unittest.TestCase):
     def test_marker_filename_describes_managed_file_hashes(self) -> None:
         self.assertEqual(cli.MARKER_FILENAME, ".managed-file-hashes.json")
+
+    def test_marker_records_current_template_fingerprint(self) -> None:
+        config = {
+            "version": cli.CONFIG_VERSION,
+            "host_ports": [],
+            "masked_paths": [],
+            "read_only_paths": [],
+            "gpu": cli.DEFAULT_GPU,
+        }
+        generated_files = cli.render_files([], [], [], cli.DEFAULT_GPU)
+
+        marker = cli.build_marker(config, generated_files)
+
+        self.assertEqual(
+            marker[cli.TEMPLATE_FINGERPRINT_KEY],
+            cli.template_fingerprint(),
+        )
+
+    def test_marker_without_fingerprint_compares_saved_generated_files(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            config = {
+                "version": cli.CONFIG_VERSION,
+                "host_ports": [],
+                "masked_paths": [],
+                "read_only_paths": [],
+                "gpu": cli.DEFAULT_GPU,
+            }
+            generated_files = cli.render_files([], [], [], cli.DEFAULT_GPU)
+            marker = cli.build_marker(config, generated_files)
+            marker.pop(cli.TEMPLATE_FINGERPRINT_KEY)
+
+            self.assertFalse(
+                cli.template_changed_since_generation(marker, config, workspace)
+            )
+
+            template_directory = workspace / "test-templates"
+            shutil.copytree(cli.TEMPLATE_DIRECTORY, template_directory)
+            dockerfile_template = (
+                template_directory / cli.DOCKERFILE_TEMPLATE_NAME
+            )
+            dockerfile_template.write_text(
+                dockerfile_template.read_text(encoding="utf-8")
+                + "\n# New template content.\n",
+                encoding="utf-8",
+            )
+            with patch.object(
+                cli,
+                "TEMPLATE_DIRECTORY",
+                template_directory,
+            ):
+                self.assertTrue(
+                    cli.template_changed_since_generation(marker, config, workspace)
+                )
 
     def test_find_marker_path_supports_legacy_marker_names(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
