@@ -55,14 +55,16 @@
     "source=claude-code-config-${devcontainerId},target=/home/node/.claude,type=volume",
     "source=codex-config-${devcontainerId},target=/home/node/.codex,type=volume",
     "target=/workspace/.git,type=volume,volume-nocopy",
-    "target=/workspace/.jj,type=volume,volume-nocopy"
-    "target=/workspace/.devcontainer,type=volume,volume-nocopy"
+    "target=/workspace/.jj,type=volume,volume-nocopy",
+    "target=/workspace/.devcontainer,type=volume,volume-nocopy",
+    "source=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind"
   ],
   "containerEnv": {
     "NODE_OPTIONS": "--max-old-space-size=4096",
     "CLAUDE_CONFIG_DIR": "/home/node/.claude",
     "CODEX_HOME": "/home/node/.codex",
-    "POWERLEVEL9K_DISABLE_GITSTATUS": "true"
+    "POWERLEVEL9K_DISABLE_GITSTATUS": "true",
+    "DISPLAY": "${localEnv:DISPLAY}"
   },
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=delegated",
   "workspaceFolder": "/workspace",
