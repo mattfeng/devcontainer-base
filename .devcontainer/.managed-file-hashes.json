@@ -1,0 +1,34 @@
+{
+  "generated_by": "codex-claude-devcontainer-configurator",
+  "version": 4,
+  "template_fingerprint": "77816858a01570879be37cbf39f0725367b262468e5ac9f0342559ae845f1e93",
+  "config": {
+    "version": 4,
+    "host_ports": [],
+    "masked_paths": [
+      ".jj",
+      ".git",
+      ".venv"
+    ],
+    "masked_scan_paths": [
+      ".venv"
+    ],
+    "read_only_paths": [
+      ".devcontainer",
+      "uv.lock"
+    ],
+    "read_only_scan_paths": [
+      "uv.lock"
+    ],
+    "gpu": {
+      "mode": "none",
+      "device": ""
+    }
+  },
+  "managed_files": {
+    "Dockerfile": "aefde421295efe2f067d376ee5a812ba881572611f462100cada42e33d895a1e",
+    "devcontainer.json": "318d8575abc06d5533154ce387bf3c0915d4dda9eb0f9f444c19b1aa3cfa9440",
+    "init-firewall.sh": "d06d1bb09496039a0bafe45ab13fb684ec7ae5139ef96177d8fbc1d3946cefcf",
+    ".empty-mask": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+}

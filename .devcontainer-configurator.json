@@ -3,11 +3,17 @@
   "host_ports": [],
   "masked_paths": [
     ".jj",
-    ".git"
+    ".git",
+    ".venv"
+  ],
+  "masked_scan_paths": [
+    ".venv"
   ],
   "read_only_paths": [
     ".devcontainer",
-    "pyproject.toml",
+    "uv.lock"
+  ],
+  "read_only_scan_paths": [
     "uv.lock"
   ],
   "gpu": {
