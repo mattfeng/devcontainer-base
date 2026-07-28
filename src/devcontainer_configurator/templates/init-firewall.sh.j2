@@ -93,7 +93,7 @@ fi
 echo "Host gateway detected as: $HOST_IP"
 
 if [ -n "${DEVCONTAINER_HOST_PORTS:-}" ]; then
-    for port in ${DEVCONTAINER_HOST_PORTS//,/ }; do
+    for port in ${DEVCONTAINER_HOST_PORTS//,/$'\n'}; do
         if [[ ! "$port" =~ ^[0-9]+$ ]] || [ "$port" -lt 1 ] || [ "$port" -gt 65535 ]; then
             echo "ERROR: Invalid DEVCONTAINER_HOST_PORTS entry: $port"
             exit 1
