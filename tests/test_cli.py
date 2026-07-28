@@ -76,6 +76,20 @@ class DevcontainerMountTests(unittest.TestCase):
         )
         self.assertEqual(devcontainer["build"]["args"]["YARN_VERSION"], "4")
 
+    def test_generated_devcontainer_uses_yarn_node_modules_linker(self) -> None:
+        generated_files = cli.render_files(
+            host_ports=[],
+            masked_paths=[],
+            read_only_paths=[],
+            gpu=cli.DEFAULT_GPU,
+        )
+
+        self.assertIn(
+            "RUN printf '%s\\n' 'nodeLinker: node-modules' "
+            "> /home/node/.yarnrc.yml",
+            generated_files["Dockerfile"],
+        )
+
     def test_generated_dockerfile_installs_uv_for_node_user(self) -> None:
         generated_files = cli.render_files(
             host_ports=[],
