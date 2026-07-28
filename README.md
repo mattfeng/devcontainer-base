@@ -28,17 +28,20 @@ The configurator prompts for:
 
 - GPU access: no GPUs, all GPUs, or one specific GPU device
 - Host TCP ports the container can reach through `host.docker.internal`
-- Workspace paths to mask from the container, defaulting to `.jj` and `.git`
+- Workspace paths to mask from the container, defaulting to `.jj` and `.git`.
+  The configurator also detects `.venv` directories and asks before adding newly
+  discovered ones to this list.
 - Workspace paths to mount read-only in the container, defaulting to
-  `.devcontainer` plus detected npm, Yarn, and uv manifest/lock files under the
-  workspace. The scan skips dependency and generated directories such as
-  `node_modules`.
+  `.devcontainer` plus detected npm, Yarn, and uv lockfiles under the workspace.
+  Project manifests such as `package.json` and `pyproject.toml` remain writable.
+  The scan skips hidden directories and dependency/generated directories such
+  as `.next` and `node_modules`.
 
 For each setting, the configurator shows the current value and asks whether to
 change it. If you choose to change it, it opens `$VISUAL` or `$EDITOR` with the
 current value already filled in, falling back to `nano` or `vi`. Save an empty
 file to clear list-style settings such as ports or workspace paths.
-On reruns, the configurator scans again for newly added manifest/lock files and
+On reruns, the configurator scans again for newly added lockfiles and
 asks whether to edit and append them to the read-only mounts.
 It also detects when the installed configurator has a newer devcontainer
 template and asks before upgrading the generated files. Accepting the upgrade

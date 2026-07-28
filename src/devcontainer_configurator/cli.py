@@ -32,16 +32,15 @@ MASKED_FILE_PLACEHOLDER = ".empty-mask"
 
 DEFAULT_MASKED_PATHS = [".jj", ".git"]
 DEFAULT_READ_ONLY_PATHS = [".devcontainer"]
+MASKED_SCAN_PATHS_KEY = "masked_scan_paths"
 READ_ONLY_SCAN_PATHS_KEY = "read_only_scan_paths"
-PACKAGE_MANAGER_READ_ONLY_FILENAMES = {
-    "package.json",
+VENV_DIRNAME = ".venv"
+PACKAGE_MANAGER_LOCK_FILENAMES = {
     "package-lock.json",
     "yarn.lock",
-    ".yarnrc.yml",
-    "pyproject.toml",
     "uv.lock",
 }
-READ_ONLY_SCAN_IGNORED_DIRS = {
+WORKSPACE_SCAN_IGNORED_DIRS = {
     ".devcontainer",
     ".git",
     ".hg",
@@ -126,6 +125,7 @@ def configure(workspace: Path) -> int:
 
     current_host_ports = config_list(prior_config, "host_ports", DEFAULT_HOST_PORTS)
     current_masked_paths = config_masked_paths(prior_config)
+    detected_masked_paths = detected_venv_masked_paths(workspace)
     detected_read_only_paths = detected_package_manager_read_only_paths(workspace)
     current_read_only_paths = config_read_only_paths(prior_config, workspace)
     current_gpu = config_gpu(prior_config)
@@ -133,6 +133,15 @@ def configure(workspace: Path) -> int:
     host_ports = prompt_host_ports(current_host_ports)
     masked_paths = prompt_masked_paths(current_masked_paths)
     read_only_paths = prompt_read_only_paths(current_read_only_paths)
+    masked_scan_paths = promptable_masked_scan_paths(
+        detected_masked_paths,
+        read_only_paths,
+    )
+    masked_paths = prompt_new_detected_masked_paths(
+        masked_paths,
+        masked_scan_paths,
+        config_masked_scan_paths(prior_config),
+    )
     read_only_scan_paths = promptable_read_only_scan_paths(
         detected_read_only_paths,
         masked_paths,
@@ -148,6 +157,7 @@ def configure(workspace: Path) -> int:
         "version": CONFIG_VERSION,
         "host_ports": host_ports,
         "masked_paths": masked_paths,
+        MASKED_SCAN_PATHS_KEY: masked_scan_paths,
         "read_only_paths": read_only_paths,
         READ_ONLY_SCAN_PATHS_KEY: read_only_scan_paths,
         "gpu": gpu,
@@ -416,6 +426,13 @@ def config_masked_paths(config: dict[str, Any]) -> list[str]:
     return DEFAULT_MASKED_PATHS[:]
 
 
+def config_masked_scan_paths(config: dict[str, Any]) -> list[str]:
+    return normalize_workspace_paths(
+        config_list(config, MASKED_SCAN_PATHS_KEY, []),
+        "Masked scan",
+    )
+
+
 def config_read_only_paths(
     config: dict[str, Any],
     workspace: Path | None = None,
@@ -463,23 +480,55 @@ def default_read_only_paths(workspace: Path | None = None) -> list[str]:
     )
 
 
+def detected_venv_masked_paths(workspace: Path | None) -> list[str]:
+    if workspace is None:
+        return []
+
+    paths: list[str] = []
+    for root, dirs, _files in os.walk(workspace):
+        root_path = Path(root)
+        if VENV_DIRNAME in dirs:
+            paths.append(
+                (root_path / VENV_DIRNAME).relative_to(workspace).as_posix()
+            )
+        dirs[:] = scannable_workspace_directories(dirs)
+    return paths
+
+
 def detected_package_manager_read_only_paths(workspace: Path | None) -> list[str]:
     if workspace is None:
         return []
 
     paths: list[str] = []
     for root, dirs, files in os.walk(workspace):
-        dirs[:] = sorted(
-            directory
-            for directory in dirs
-            if directory not in READ_ONLY_SCAN_IGNORED_DIRS
-        )
+        dirs[:] = scannable_workspace_directories(dirs)
         root_path = Path(root)
         for filename in sorted(files):
-            if filename not in PACKAGE_MANAGER_READ_ONLY_FILENAMES:
+            if filename not in PACKAGE_MANAGER_LOCK_FILENAMES:
                 continue
             paths.append((root_path / filename).relative_to(workspace).as_posix())
     return paths
+
+
+def scannable_workspace_directories(directories: list[str]) -> list[str]:
+    return sorted(
+        directory
+        for directory in directories
+        if not directory.startswith(".")
+        and directory not in WORKSPACE_SCAN_IGNORED_DIRS
+    )
+
+
+def promptable_masked_scan_paths(
+    detected_paths: list[str],
+    read_only_paths: list[Any],
+) -> list[str]:
+    read_only = set(normalize_workspace_paths(read_only_paths, "Read-only"))
+    return [
+        path
+        for path in normalize_workspace_paths(detected_paths, "Detected masked")
+        if path not in read_only
+    ]
 
 
 def promptable_read_only_scan_paths(
@@ -571,6 +620,52 @@ def prompt_read_only_paths(current: list[Any]) -> list[str]:
     return new_paths
 
 
+def prompt_new_detected_masked_paths(
+    current: list[Any],
+    detected_paths: list[Any],
+    known_scan_paths: list[Any],
+) -> list[str]:
+    normalized_current = normalize_workspace_paths(current, "Masked")
+    current_set = set(normalized_current)
+    known_scan_set = set(normalize_workspace_paths(known_scan_paths, "Masked scan"))
+    new_paths = [
+        path
+        for path in normalize_workspace_paths(detected_paths, "Detected masked")
+        if path not in current_set and path not in known_scan_set
+    ]
+    if not new_paths:
+        return normalized_current
+
+    if not prompt_change(
+        "Mask newly detected .venv directories from the container? "
+        f"Found: {format_display_list(new_paths)}"
+    ):
+        return normalized_current
+
+    raw = edit_prompt_value(
+        "Newly detected .venv directories",
+        format_editor_list(new_paths),
+    ).strip()
+    if not raw:
+        selected_paths: list[str] = []
+    elif raw.lower() in {"none", "no", "-"}:
+        selected_paths = []
+    else:
+        selected_paths = normalize_workspace_paths(split_editor_list(raw), "Masked")
+
+    selected_new_paths = [path for path in selected_paths if path not in current_set]
+    if not selected_new_paths:
+        print("Workspace paths to mask: nothing changed.")
+        return normalized_current
+
+    merged_paths = merge_workspace_paths(normalized_current, selected_new_paths)
+    print(
+        "Workspace paths to mask: added "
+        f"{format_display_list(selected_new_paths)}."
+    )
+    return merged_paths
+
+
 def prompt_new_detected_read_only_paths(
     current: list[Any],
     detected_paths: list[Any],
@@ -588,7 +683,7 @@ def prompt_new_detected_read_only_paths(
         return normalized_current
 
     if not prompt_change(
-        "Add newly detected manifest/lock files to the read-only mounts? "
+        "Add newly detected lockfiles to the read-only mounts? "
         f"Found: {format_display_list(new_paths)}"
     ):
         return normalized_current

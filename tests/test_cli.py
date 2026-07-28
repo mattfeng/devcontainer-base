@@ -165,18 +165,46 @@ class DevcontainerMountTests(unittest.TestCase):
     def test_default_read_only_paths_without_workspace_use_standard_defaults(self) -> None:
         self.assertEqual(cli.config_read_only_paths({}), [".devcontainer"])
 
-    def test_default_read_only_paths_include_detected_package_manager_files(self) -> None:
+    def test_detect_venvs_without_searching_hidden_or_generated_directories(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            (workspace / ".venv").mkdir()
+            (workspace / "app" / ".venv").mkdir(parents=True)
+            (workspace / ".next" / ".venv").mkdir(parents=True)
+            (workspace / "node_modules" / "dependency" / ".venv").mkdir(
+                parents=True
+            )
+
+            self.assertEqual(
+                cli.detected_venv_masked_paths(workspace),
+                [".venv", "app/.venv"],
+            )
+
+    def test_detected_venv_already_mounted_read_only_is_not_promptable(self) -> None:
+        self.assertEqual(
+            cli.promptable_masked_scan_paths(
+                [".venv", "app/.venv"],
+                ["app/.venv"],
+            ),
+            [".venv"],
+        )
+
+    def test_default_read_only_paths_include_only_detected_lockfiles(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             workspace = Path(temp_dir)
             (workspace / "package.json").write_text("{}", encoding="utf-8")
+            (workspace / "package-lock.json").write_text("", encoding="utf-8")
             (workspace / "app").mkdir()
-            (workspace / "app" / "package-lock.json").write_text("", encoding="utf-8")
+            (workspace / "app" / "package.json").write_text("{}", encoding="utf-8")
+            (workspace / "app" / "yarn.lock").write_text("", encoding="utf-8")
             (workspace / "service").mkdir()
             (workspace / "service" / "pyproject.toml").write_text("", encoding="utf-8")
             (workspace / "service" / "uv.lock").write_text("", encoding="utf-8")
             (workspace / "node_modules").mkdir()
-            (workspace / "node_modules" / "package.json").write_text(
-                "{}",
+            (workspace / "node_modules" / "package-lock.json").write_text(
+                "",
                 encoding="utf-8",
             )
 
@@ -184,24 +212,42 @@ class DevcontainerMountTests(unittest.TestCase):
                 cli.config_read_only_paths({}, workspace),
                 [
                     ".devcontainer",
-                    "package.json",
-                    "app/package-lock.json",
-                    "service/pyproject.toml",
+                    "package-lock.json",
+                    "app/yarn.lock",
                     "service/uv.lock",
                 ],
+            )
+
+    def test_lockfile_scan_skips_all_hidden_directories(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            (workspace / "visible").mkdir()
+            (workspace / "visible" / "uv.lock").write_text("", encoding="utf-8")
+            (workspace / ".next").mkdir()
+            (workspace / ".next" / "yarn.lock").write_text("", encoding="utf-8")
+            (workspace / "visible" / ".cache").mkdir()
+            (workspace / "visible" / ".cache" / "package-lock.json").write_text(
+                "",
+                encoding="utf-8",
+            )
+
+            self.assertEqual(
+                cli.detected_package_manager_read_only_paths(workspace),
+                ["visible/uv.lock"],
             )
 
     def test_old_default_read_only_config_gets_detected_defaults(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             workspace = Path(temp_dir)
             (workspace / "pyproject.toml").write_text("", encoding="utf-8")
+            (workspace / "uv.lock").write_text("", encoding="utf-8")
 
             self.assertEqual(
                 cli.config_read_only_paths(
                     {"version": 3, "read_only_paths": [".devcontainer"]},
                     workspace,
                 ),
-                [".devcontainer", "pyproject.toml"],
+                [".devcontainer", "uv.lock"],
             )
 
     def test_saved_read_only_paths_are_reused(self) -> None:
@@ -291,19 +337,15 @@ class DevcontainerMountTests(unittest.TestCase):
                 remembered_config,
                 {
                     **saved_config,
-                    cli.READ_ONLY_SCAN_PATHS_KEY: ["package.json", "uv.lock"],
+                    cli.MASKED_SCAN_PATHS_KEY: [],
+                    cli.READ_ONLY_SCAN_PATHS_KEY: ["uv.lock"],
                 },
             )
 
-    def test_configure_prompts_to_add_new_detected_files_on_rerun(self) -> None:
+    def test_configure_prompts_to_mask_detected_venv(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             workspace = Path(temp_dir)
-
-            with patch("builtins.input", return_value="n"), patch("builtins.print"):
-                self.assertEqual(cli.configure(workspace), 0)
-
-            (workspace / "app").mkdir()
-            (workspace / "app" / "package.json").write_text("{}", encoding="utf-8")
+            (workspace / ".venv").mkdir()
 
             with patch(
                 "builtins.input",
@@ -311,7 +353,39 @@ class DevcontainerMountTests(unittest.TestCase):
             ), patch("builtins.print"), patch.object(
                 cli,
                 "edit_prompt_value",
-                return_value="app/package.json\n",
+                return_value=".venv\n",
+            ):
+                self.assertEqual(cli.configure(workspace), 0)
+
+            remembered_config = json.loads(
+                (workspace / cli.ROOT_STATE_FILENAME).read_text(encoding="utf-8")
+            )
+            self.assertEqual(
+                remembered_config["masked_paths"],
+                [".jj", ".git", ".venv"],
+            )
+            self.assertEqual(
+                remembered_config[cli.MASKED_SCAN_PATHS_KEY],
+                [".venv"],
+            )
+
+    def test_configure_prompts_to_add_new_detected_lockfiles_on_rerun(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+
+            with patch("builtins.input", return_value="n"), patch("builtins.print"):
+                self.assertEqual(cli.configure(workspace), 0)
+
+            (workspace / "app").mkdir()
+            (workspace / "app" / "yarn.lock").write_text("", encoding="utf-8")
+
+            with patch(
+                "builtins.input",
+                side_effect=["n", "n", "n", "y", "n"],
+            ), patch("builtins.print"), patch.object(
+                cli,
+                "edit_prompt_value",
+                return_value="app/yarn.lock\n",
             ):
                 self.assertEqual(cli.configure(workspace), 0)
 
@@ -320,11 +394,11 @@ class DevcontainerMountTests(unittest.TestCase):
             )
             self.assertEqual(
                 remembered_config["read_only_paths"],
-                [".devcontainer", "app/package.json"],
+                [".devcontainer", "app/yarn.lock"],
             )
             self.assertEqual(
                 remembered_config[cli.READ_ONLY_SCAN_PATHS_KEY],
-                ["app/package.json"],
+                ["app/yarn.lock"],
             )
 
     def test_configure_upgrades_changed_template_when_accepted(self) -> None:
@@ -592,28 +666,64 @@ class PromptTests(unittest.TestCase):
             )
         print_mock.assert_called_once_with("GPU access: changed from device=0 to all.")
 
+    def test_prompt_adds_new_detected_venv_to_masked_paths(self) -> None:
+        with patch("builtins.input", return_value="y"), patch(
+            "builtins.print"
+        ) as print_mock, patch.object(
+            cli,
+            "edit_prompt_value",
+            return_value=".venv\n",
+        ) as edit_prompt_value:
+            self.assertEqual(
+                cli.prompt_new_detected_masked_paths(
+                    [".git"],
+                    [".venv"],
+                    [],
+                ),
+                [".git", ".venv"],
+            )
+        print_mock.assert_called_once_with(
+            "Workspace paths to mask: added .venv."
+        )
+        edit_prompt_value.assert_called_once_with(
+            "Newly detected .venv directories",
+            ".venv\n",
+        )
+
+    def test_prompt_skips_detected_venv_seen_before(self) -> None:
+        with patch("builtins.input") as input_mock:
+            self.assertEqual(
+                cli.prompt_new_detected_masked_paths(
+                    [".git"],
+                    [".venv"],
+                    [".venv"],
+                ),
+                [".git"],
+            )
+        input_mock.assert_not_called()
+
     def test_prompt_adds_new_detected_read_only_paths(self) -> None:
         with patch("builtins.input", return_value="y"), patch(
             "builtins.print"
         ) as print_mock, patch.object(
             cli,
             "edit_prompt_value",
-            return_value="package.json\n",
+            return_value="yarn.lock\n",
         ) as edit_prompt_value:
             self.assertEqual(
                 cli.prompt_new_detected_read_only_paths(
                     [".devcontainer"],
-                    ["package.json"],
+                    ["yarn.lock"],
                     [],
                 ),
-                [".devcontainer", "package.json"],
+                [".devcontainer", "yarn.lock"],
             )
         print_mock.assert_called_once_with(
-            "Workspace paths to mount read-only: added package.json."
+            "Workspace paths to mount read-only: added yarn.lock."
         )
         edit_prompt_value.assert_called_once_with(
             "Newly detected read-only paths",
-            "package.json\n",
+            "yarn.lock\n",
         )
 
     def test_prompt_can_edit_new_detected_read_only_paths(self) -> None:
@@ -622,18 +732,18 @@ class PromptTests(unittest.TestCase):
         ) as print_mock, patch.object(
             cli,
             "edit_prompt_value",
-            return_value="app/package.json\n",
+            return_value="app/yarn.lock\n",
         ):
             self.assertEqual(
                 cli.prompt_new_detected_read_only_paths(
                     [".devcontainer"],
-                    ["app/package.json", "service/pyproject.toml"],
+                    ["app/yarn.lock", "service/uv.lock"],
                     [],
                 ),
-                [".devcontainer", "app/package.json"],
+                [".devcontainer", "app/yarn.lock"],
             )
         print_mock.assert_called_once_with(
-            "Workspace paths to mount read-only: added app/package.json."
+            "Workspace paths to mount read-only: added app/yarn.lock."
         )
 
     def test_prompt_can_clear_new_detected_read_only_paths(self) -> None:
@@ -647,7 +757,7 @@ class PromptTests(unittest.TestCase):
             self.assertEqual(
                 cli.prompt_new_detected_read_only_paths(
                     [".devcontainer"],
-                    ["package.json"],
+                    ["yarn.lock"],
                     [],
                 ),
                 [".devcontainer"],
@@ -661,8 +771,8 @@ class PromptTests(unittest.TestCase):
             self.assertEqual(
                 cli.prompt_new_detected_read_only_paths(
                     [".devcontainer"],
-                    ["package.json"],
-                    ["package.json"],
+                    ["yarn.lock"],
+                    ["yarn.lock"],
                 ),
                 [".devcontainer"],
             )
