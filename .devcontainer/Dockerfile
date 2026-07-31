@@ -67,6 +67,8 @@ RUN ARCH=$(dpkg --print-architecture) && \
 
 USER node
 
+RUN printf '%s\n' 'nodeLinker: node-modules' > /home/node/.yarnrc.yml
+
 ENV PATH="/home/node/.local/bin:${PATH}"
 
 ENV NPM_CONFIG_PREFIX=/usr/local/share/npm-global

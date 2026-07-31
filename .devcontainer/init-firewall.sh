@@ -29,7 +29,7 @@ iptables -A INPUT -p tcp --sport 22 -m state --state ESTABLISHED -j ACCEPT
 iptables -A INPUT -i lo -j ACCEPT
 iptables -A OUTPUT -o lo -j ACCEPT
 
-ipset create allowed-domains hash:net
+ipset create allowed-domains hash:net -exist
 
 echo "Fetching GitHub IP ranges..."
 gh_ranges=$(curl -s https://api.github.com/meta)
@@ -50,11 +50,14 @@ while read -r cidr; do
         exit 1
     fi
     echo "Adding GitHub range $cidr"
-    ipset add allowed-domains "$cidr"
+    ipset add allowed-domains "$cidr" -exist
 done < <(echo "$gh_ranges" | jq -r '(.web + .api + .git)[]' | aggregate -q)
 
 for domain in \
     "registry.npmjs.org" \
+    "ui.shadcn.com" \
+    "pypi.org" \
+    "files.pythonhosted.org" \
     "api.anthropic.com" \
     "api.openai.com" \
     "auth.openai.com" \
@@ -77,7 +80,7 @@ for domain in \
             exit 1
         fi
         echo "Adding $ip for $domain"
-        ipset add allowed-domains "$ip"
+        ipset add allowed-domains "$ip" -exist
     done < <(echo "$ips")
 done
 
@@ -93,7 +96,7 @@ fi
 echo "Host gateway detected as: $HOST_IP"
 
 if [ -n "${DEVCONTAINER_HOST_PORTS:-}" ]; then
-    for port in ${DEVCONTAINER_HOST_PORTS//,/ }; do
+    for port in ${DEVCONTAINER_HOST_PORTS//,/$'\n'}; do
         if [[ ! "$port" =~ ^[0-9]+$ ]] || [ "$port" -lt 1 ] || [ "$port" -gt 65535 ]; then
             echo "ERROR: Invalid DEVCONTAINER_HOST_PORTS entry: $port"
             exit 1

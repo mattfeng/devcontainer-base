@@ -1,7 +1,7 @@
 {
   "generated_by": "codex-claude-devcontainer-configurator",
   "version": 4,
-  "template_fingerprint": "77816858a01570879be37cbf39f0725367b262468e5ac9f0342559ae845f1e93",
+  "template_fingerprint": "3f764203c50600c8906ab445f0aedd02c532338bb416e01b65fdb09dfb5681c1",
   "config": {
     "version": 4,
     "host_ports": [],
@@ -26,9 +26,9 @@
     }
   },
   "managed_files": {
-    "Dockerfile": "aefde421295efe2f067d376ee5a812ba881572611f462100cada42e33d895a1e",
+    "Dockerfile": "4beae72c16f7ae24fda5d641ed0eb1212033ea59f5f4a7a8aef4302a82033793",
     "devcontainer.json": "318d8575abc06d5533154ce387bf3c0915d4dda9eb0f9f444c19b1aa3cfa9440",
-    "init-firewall.sh": "d06d1bb09496039a0bafe45ab13fb684ec7ae5139ef96177d8fbc1d3946cefcf",
+    "init-firewall.sh": "4558475225d539b97a4c90d490ceb63e2b89ca7b1bb88d4f218fd0e733640568",
     ".empty-mask": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
   }
 }
