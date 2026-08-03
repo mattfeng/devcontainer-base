@@ -55,7 +55,7 @@ class DevcontainerMountTests(unittest.TestCase):
 
         self.assertIn("postgresql-client", generated_files["Dockerfile"])
 
-    def test_generated_devcontainer_installs_yarn_v4(self) -> None:
+    def test_generated_devcontainer_uses_node_24_and_modern_yarn(self) -> None:
         generated_files = cli.render_files(
             host_ports=[],
             masked_paths=[],
@@ -69,12 +69,25 @@ class DevcontainerMountTests(unittest.TestCase):
             gpu=cli.DEFAULT_GPU,
         )
 
-        self.assertIn("ARG YARN_VERSION=4", generated_files["Dockerfile"])
+        dockerfile = generated_files["Dockerfile"]
+
+        self.assertIn("FROM node:24", dockerfile)
+        self.assertIn("ARG YARN_MODERN_VERSION=4", dockerfile)
+        self.assertIn('ENV YARN_VERSION="$YARN_MODERN_VERSION"', dockerfile)
+        self.assertIn(
+            "find /opt -maxdepth 1 -type d -name 'yarn-v*' "
+            "-exec rm -rf -- {} +",
+            dockerfile,
+        )
+        self.assertIn("rm -f /usr/local/bin/yarn /usr/local/bin/yarnpkg", dockerfile)
         self.assertIn(
             'corepack install --global "yarn@${YARN_VERSION}"',
-            generated_files["Dockerfile"],
+            dockerfile,
         )
-        self.assertEqual(devcontainer["build"]["args"]["YARN_VERSION"], "4")
+        self.assertEqual(
+            devcontainer["build"]["args"]["YARN_MODERN_VERSION"], "4"
+        )
+        self.assertNotIn("YARN_VERSION", devcontainer["build"]["args"])
 
     def test_generated_devcontainer_uses_yarn_node_modules_linker(self) -> None:
         generated_files = cli.render_files(
@@ -90,6 +103,19 @@ class DevcontainerMountTests(unittest.TestCase):
             generated_files["Dockerfile"],
         )
 
+    def test_firewall_allows_modern_yarn_downloads(self) -> None:
+        generated_files = cli.render_files(
+            host_ports=[],
+            masked_paths=[],
+            read_only_paths=[],
+            gpu=cli.DEFAULT_GPU,
+        )
+
+        firewall = generated_files["init-firewall.sh"]
+
+        self.assertIn('"registry.yarnpkg.com"', firewall)
+        self.assertIn('"repo.yarnpkg.com"', firewall)
+
     def test_generated_dockerfile_installs_uv_for_node_user(self) -> None:
         generated_files = cli.render_files(
             host_ports=[],
@@ -99,10 +125,14 @@ class DevcontainerMountTests(unittest.TestCase):
         )
         dockerfile = generated_files["Dockerfile"]
 
-        self.assertLess(
-            dockerfile.index("USER node\n\nENV PATH=\"/home/node/.local/bin:${PATH}\""),
-            dockerfile.index("RUN pipx install uv"),
+        user_index = dockerfile.index("USER node")
+        local_bin_path_index = dockerfile.index(
+            'ENV PATH="/home/node/.local/bin:${PATH}"'
         )
+        uv_install_index = dockerfile.index("RUN pipx install uv")
+
+        self.assertLess(user_index, local_bin_path_index)
+        self.assertLess(local_bin_path_index, uv_install_index)
         self.assertIn("RUN pipx install uv && \\\n  uv --version", dockerfile)
 
     def test_firewall_sudo_command_receives_host_ports_env(self) -> None:

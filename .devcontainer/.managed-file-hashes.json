@@ -1,20 +1,20 @@
 {
   "generated_by": "codex-claude-devcontainer-configurator",
   "version": 4,
-  "template_fingerprint": "3f764203c50600c8906ab445f0aedd02c532338bb416e01b65fdb09dfb5681c1",
+  "template_fingerprint": "ded02efa7e745fffe173f4f44a61da18446111b2ee85672f945c3d688cd50551",
   "config": {
     "version": 4,
     "host_ports": [],
     "masked_paths": [
       ".jj",
       ".git",
-      ".venv"
+      ".venv",
+      ".devcontainer"
     ],
     "masked_scan_paths": [
       ".venv"
     ],
     "read_only_paths": [
-      ".devcontainer",
       "uv.lock"
     ],
     "read_only_scan_paths": [
@@ -27,8 +27,8 @@
   },
   "managed_files": {
     "Dockerfile": "4beae72c16f7ae24fda5d641ed0eb1212033ea59f5f4a7a8aef4302a82033793",
-    "devcontainer.json": "318d8575abc06d5533154ce387bf3c0915d4dda9eb0f9f444c19b1aa3cfa9440",
-    "init-firewall.sh": "4558475225d539b97a4c90d490ceb63e2b89ca7b1bb88d4f218fd0e733640568",
+    "devcontainer.json": "0e883f3b1a63e4425815656e0e863a04b0d8eee1ba338bbe798fd3535bd808f5",
+    "init-firewall.sh": "077a16ebfe6438fa7afd3b682143bccd3b5bdd1746f3e6c696b559a1d49d4db7",
     ".empty-mask": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
   }
 }

@@ -60,7 +60,7 @@
     "target=/workspace/.jj,type=volume,volume-nocopy",
     "target=/workspace/.git,type=volume,volume-nocopy",
     "target=/workspace/.venv,type=volume,volume-nocopy",
-    "source=${localWorkspaceFolder}/.devcontainer,target=/workspace/.devcontainer,type=bind,readonly",
+    "target=/workspace/.devcontainer,type=volume,volume-nocopy",
     "source=${localWorkspaceFolder}/uv.lock,target=/workspace/uv.lock,type=bind,readonly"
   ],
   "containerEnv": {

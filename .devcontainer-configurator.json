@@ -4,13 +4,13 @@
   "masked_paths": [
     ".jj",
     ".git",
-    ".venv"
+    ".venv",
+    ".devcontainer"
   ],
   "masked_scan_paths": [
     ".venv"
   ],
   "read_only_paths": [
-    ".devcontainer",
     "uv.lock"
   ],
   "read_only_scan_paths": [
