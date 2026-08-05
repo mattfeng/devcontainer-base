@@ -1,4 +1,4 @@
-"""Interactive CLI for generating Codex/Claude Code dev containers."""
+"""Interactive CLI for generating Claude Code, Codex, and Pi dev containers."""
 
 from __future__ import annotations
 
@@ -72,7 +72,7 @@ TEMPLATE_NAMES = [
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Generate a Codex/Claude Code .devcontainer directory."
+        description="Generate a Claude Code, Codex, and Pi .devcontainer directory."
     )
     parser.add_argument(
         "--workspace",

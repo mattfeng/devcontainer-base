@@ -103,6 +103,41 @@ class DevcontainerMountTests(unittest.TestCase):
             generated_files["Dockerfile"],
         )
 
+    def test_generated_devcontainer_installs_and_persists_pi(self) -> None:
+        generated_files = cli.render_files(
+            host_ports=[],
+            masked_paths=[],
+            read_only_paths=[],
+            gpu=cli.DEFAULT_GPU,
+        )
+        devcontainer = cli.build_devcontainer_json(
+            host_ports=[],
+            masked_paths=[],
+            read_only_paths=[],
+            gpu=cli.DEFAULT_GPU,
+        )
+
+        dockerfile = generated_files["Dockerfile"]
+        self.assertIn("ARG PI_CODING_AGENT_VERSION=latest", dockerfile)
+        self.assertIn(
+            "RUN npm install -g --ignore-scripts "
+            "@earendil-works/pi-coding-agent@${PI_CODING_AGENT_VERSION}",
+            dockerfile,
+        )
+        self.assertEqual(
+            devcontainer["build"]["args"]["PI_CODING_AGENT_VERSION"],
+            "latest",
+        )
+        self.assertIn(
+            "source=pi-config-${devcontainerId},"
+            "target=/home/node/.pi,type=volume",
+            devcontainer["mounts"],
+        )
+        self.assertEqual(
+            devcontainer["containerEnv"]["PI_CODING_AGENT_DIR"],
+            "/home/node/.pi/agent",
+        )
+
     def test_firewall_allows_modern_yarn_downloads(self) -> None:
         generated_files = cli.render_files(
             host_ports=[],
@@ -115,6 +150,16 @@ class DevcontainerMountTests(unittest.TestCase):
 
         self.assertIn('"registry.yarnpkg.com"', firewall)
         self.assertIn('"repo.yarnpkg.com"', firewall)
+
+    def test_firewall_allows_pi_startup_requests(self) -> None:
+        generated_files = cli.render_files(
+            host_ports=[],
+            masked_paths=[],
+            read_only_paths=[],
+            gpu=cli.DEFAULT_GPU,
+        )
+
+        self.assertIn('"pi.dev"', generated_files["init-firewall.sh"])
 
     def test_generated_dockerfile_installs_uv_for_node_user(self) -> None:
         generated_files = cli.render_files(

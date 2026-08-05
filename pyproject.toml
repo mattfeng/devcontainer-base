@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "codex-claude-devcontainer-configurator"
 version = "0.2.0"
-description = "Interactive configurator for Codex and Claude Code dev containers"
+description = "Interactive configurator for Claude Code, Codex, and Pi dev containers"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"

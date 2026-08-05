@@ -6,6 +6,7 @@ ENV TZ="$TZ"
 
 ARG CLAUDE_CODE_VERSION=latest
 ARG CODEX_CLI_VERSION=latest
+ARG PI_CODING_AGENT_VERSION=latest
 ARG YARN_MODERN_VERSION=4
 
 ENV COREPACK_HOME=/usr/local/share/corepack
@@ -57,8 +58,8 @@ RUN SNIPPET="export PROMPT_COMMAND='history -a' && export HISTFILE=/commandhisto
 
 ENV DEVCONTAINER=true
 
-RUN mkdir -p /workspace /home/node/.claude /home/node/.codex && \
-  chown -R node:node /workspace /home/node/.claude /home/node/.codex
+RUN mkdir -p /workspace /home/node/.claude /home/node/.codex /home/node/.pi/agent && \
+  chown -R node:node /workspace /home/node/.claude /home/node/.codex /home/node/.pi
 
 WORKDIR /workspace
 
@@ -95,6 +96,7 @@ RUN sh -c "$(wget -O- https://github.com/deluan/zsh-in-docker/releases/download/
 
 RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}
 RUN npm install -g @openai/codex@${CODEX_CLI_VERSION}
+RUN npm install -g --ignore-scripts @earendil-works/pi-coding-agent@${PI_CODING_AGENT_VERSION}
 
 COPY init-firewall.sh /usr/local/bin/
 USER root
