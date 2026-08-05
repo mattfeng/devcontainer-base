@@ -236,6 +236,59 @@ class DevcontainerMountTests(unittest.TestCase):
         )
         self.assertNotIn("GIT_OPTIONAL_LOCKS", devcontainer["containerEnv"])
 
+    def test_build_devcontainer_mounts_reference_projects_by_folder_name(
+        self,
+    ) -> None:
+        devcontainer = cli.build_devcontainer_json(
+            host_ports=[],
+            masked_paths=[],
+            read_only_paths=[],
+            gpu=cli.DEFAULT_GPU,
+            reference_paths=["../shared-api", "/projects/design-system"],
+        )
+
+        self.assertIn(
+            "source=${localWorkspaceFolder}/../shared-api,"
+            "target=/reference/shared-api,type=bind,readonly",
+            devcontainer["mounts"],
+        )
+        self.assertIn(
+            "source=/projects/design-system,"
+            "target=/reference/design-system,type=bind,readonly",
+            devcontainer["mounts"],
+        )
+
+    def test_reference_project_folder_names_must_be_unique(self) -> None:
+        with self.assertRaisesRegex(ValueError, "unique folder names"):
+            cli.build_devcontainer_json(
+                host_ports=[],
+                masked_paths=[],
+                read_only_paths=[],
+                gpu=cli.DEFAULT_GPU,
+                reference_paths=["../team-a/service", "../team-b/service"],
+            )
+
+    def test_reference_projects_must_be_existing_directories_outside_workspace(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            workspace = root / "workspace"
+            workspace.mkdir()
+            (workspace / "nested-project").mkdir()
+            reference_project = root / "reference-project"
+            reference_project.mkdir()
+            reference_file = root / "reference-file"
+            reference_file.write_text("not a directory", encoding="utf-8")
+
+            cli.validate_reference_paths(["../reference-project"], workspace)
+            with self.assertRaisesRegex(ValueError, "outside the workspace"):
+                cli.validate_reference_paths(["nested-project"], workspace)
+            with self.assertRaisesRegex(ValueError, "does not exist"):
+                cli.validate_reference_paths(["../missing-project"], workspace)
+            with self.assertRaisesRegex(ValueError, "not a directory"):
+                cli.validate_reference_paths(["../reference-file"], workspace)
+
     def test_read_only_git_disables_optional_locks(self) -> None:
         devcontainer = cli.build_devcontainer_json(
             host_ports=[],
@@ -347,6 +400,16 @@ class DevcontainerMountTests(unittest.TestCase):
             ["README.md"],
         )
 
+    def test_version_four_read_only_paths_are_reused_after_schema_upgrade(
+        self,
+    ) -> None:
+        self.assertEqual(
+            cli.config_read_only_paths(
+                {"version": 4, "read_only_paths": [".devcontainer"]},
+            ),
+            [".devcontainer"],
+        )
+
     def test_custom_read_only_paths_do_not_get_new_defaults(self) -> None:
         self.assertEqual(
             cli.config_read_only_paths(
@@ -428,7 +491,43 @@ class DevcontainerMountTests(unittest.TestCase):
                     **saved_config,
                     cli.MASKED_SCAN_PATHS_KEY: [],
                     cli.READ_ONLY_SCAN_PATHS_KEY: ["uv.lock"],
+                    cli.REFERENCE_PATHS_KEY: [],
                 },
+            )
+
+    def test_configure_prompts_for_and_remembers_reference_projects(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            workspace = root / "workspace"
+            workspace.mkdir()
+            (root / "reference-project").mkdir()
+
+            with patch(
+                "builtins.input",
+                side_effect=["n", "n", "n", "y", "n"],
+            ), patch("builtins.print"), patch.object(
+                cli,
+                "edit_prompt_value",
+                return_value="../reference-project\n",
+            ):
+                self.assertEqual(cli.configure(workspace), 0)
+
+            remembered_config = json.loads(
+                (workspace / cli.ROOT_STATE_FILENAME).read_text(encoding="utf-8")
+            )
+            self.assertEqual(
+                remembered_config[cli.REFERENCE_PATHS_KEY],
+                ["../reference-project"],
+            )
+            devcontainer = json.loads(
+                (
+                    workspace / cli.DEVCONTAINER_DIRNAME / "devcontainer.json"
+                ).read_text(encoding="utf-8")
+            )
+            self.assertIn(
+                "source=${localWorkspaceFolder}/../reference-project,"
+                "target=/reference/reference-project,type=bind,readonly",
+                devcontainer["mounts"],
             )
 
     def test_configure_prompts_to_mask_detected_venv(self) -> None:
@@ -438,7 +537,7 @@ class DevcontainerMountTests(unittest.TestCase):
 
             with patch(
                 "builtins.input",
-                side_effect=["n", "n", "n", "y", "n"],
+                side_effect=["n", "n", "n", "n", "y", "n"],
             ), patch("builtins.print"), patch.object(
                 cli,
                 "edit_prompt_value",
@@ -470,7 +569,7 @@ class DevcontainerMountTests(unittest.TestCase):
 
             with patch(
                 "builtins.input",
-                side_effect=["n", "n", "n", "y", "n"],
+                side_effect=["n", "n", "n", "n", "y", "n"],
             ), patch("builtins.print"), patch.object(
                 cli,
                 "edit_prompt_value",
@@ -516,7 +615,7 @@ class DevcontainerMountTests(unittest.TestCase):
                 template_directory,
             ), patch(
                 "builtins.input",
-                side_effect=["y", "n", "n", "n", "n"],
+                side_effect=["y", "n", "n", "n", "n", "n"],
             ) as input_mock, patch(
                 "builtins.print"
             ):
@@ -699,6 +798,23 @@ class PromptTests(unittest.TestCase):
             self.assertEqual(cli.prompt_read_only_paths([".devcontainer"]), [])
         print_mock.assert_called_once_with(
             "Workspace paths to mount read-only: changed from .devcontainer to none."
+        )
+
+    def test_prompt_can_set_reference_project_paths(self) -> None:
+        with patch("builtins.input", return_value="y"), patch(
+            "builtins.print"
+        ) as print_mock, patch.object(
+            cli,
+            "edit_prompt_value",
+            return_value="../api\n/opt/projects/web\n",
+        ):
+            self.assertEqual(
+                cli.prompt_reference_paths([]),
+                ["../api", "/opt/projects/web"],
+            )
+        print_mock.assert_called_once_with(
+            "Reference project folders: changed from none to "
+            "../api, /opt/projects/web."
         )
 
     def test_prompt_accepts_line_or_comma_separated_editor_entries(self) -> None:

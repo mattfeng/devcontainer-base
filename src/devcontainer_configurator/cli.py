@@ -6,6 +6,7 @@ import argparse
 import hashlib
 import json
 import os
+import posixpath
 import re
 import shlex
 import shutil
@@ -18,7 +19,7 @@ from jinja2 import Environment, FileSystemLoader, StrictUndefined, TemplateError
 
 
 TOOL_NAME = "codex-claude-devcontainer-configurator"
-CONFIG_VERSION = 4
+CONFIG_VERSION = 5
 DEVCONTAINER_DIRNAME = ".devcontainer"
 ROOT_STATE_FILENAME = ".devcontainer-configurator.json"
 MARKER_FILENAME = ".managed-file-hashes.json"
@@ -32,8 +33,11 @@ MASKED_FILE_PLACEHOLDER = ".empty-mask"
 
 DEFAULT_MASKED_PATHS = [".jj", ".git"]
 DEFAULT_READ_ONLY_PATHS = [".devcontainer"]
+DEFAULT_REFERENCE_PATHS: list[str] = []
 MASKED_SCAN_PATHS_KEY = "masked_scan_paths"
 READ_ONLY_SCAN_PATHS_KEY = "read_only_scan_paths"
+REFERENCE_PATHS_KEY = "reference_paths"
+READ_ONLY_DEFAULTS_CONFIG_VERSION = 4
 VENV_DIRNAME = ".venv"
 PACKAGE_MANAGER_LOCK_FILENAMES = {
     "package-lock.json",
@@ -128,11 +132,13 @@ def configure(workspace: Path) -> int:
     detected_masked_paths = detected_venv_masked_paths(workspace)
     detected_read_only_paths = detected_package_manager_read_only_paths(workspace)
     current_read_only_paths = config_read_only_paths(prior_config, workspace)
+    current_reference_paths = config_reference_paths(prior_config)
     current_gpu = config_gpu(prior_config)
 
     host_ports = prompt_host_ports(current_host_ports)
     masked_paths = prompt_masked_paths(current_masked_paths)
     read_only_paths = prompt_read_only_paths(current_read_only_paths)
+    reference_paths = prompt_reference_paths(current_reference_paths)
     masked_scan_paths = promptable_masked_scan_paths(
         detected_masked_paths,
         read_only_paths,
@@ -152,6 +158,7 @@ def configure(workspace: Path) -> int:
         config_read_only_scan_paths(prior_config),
     )
     validate_path_lists(masked_paths, read_only_paths)
+    validate_reference_paths(reference_paths, workspace)
     gpu = prompt_gpu(current_gpu)
     config = {
         "version": CONFIG_VERSION,
@@ -160,6 +167,7 @@ def configure(workspace: Path) -> int:
         MASKED_SCAN_PATHS_KEY: masked_scan_paths,
         "read_only_paths": read_only_paths,
         READ_ONLY_SCAN_PATHS_KEY: read_only_scan_paths,
+        REFERENCE_PATHS_KEY: reference_paths,
         "gpu": gpu,
     }
 
@@ -170,6 +178,7 @@ def configure(workspace: Path) -> int:
         read_only_paths,
         gpu,
         masked_file_paths,
+        reference_paths,
     )
     for relative_path, content in generated_files.items():
         path = devcontainer_dir / relative_path
@@ -231,6 +240,7 @@ def render_files(
     read_only_paths: list[str],
     gpu: dict[str, str],
     masked_file_paths: list[str] | None = None,
+    reference_paths: list[str] | None = None,
 ) -> dict[str, str]:
     devcontainer_json = render_devcontainer_json(
         host_ports,
@@ -238,6 +248,7 @@ def render_files(
         read_only_paths,
         gpu,
         masked_file_paths,
+        reference_paths,
     )
     parse_rendered_devcontainer_json(devcontainer_json)
     return {
@@ -296,6 +307,7 @@ def template_changed_since_generation(
         config_read_only_paths(config),
         config_gpu(config),
         detect_masked_file_paths(workspace, masked_paths),
+        config_reference_paths(config),
     )
     managed_files = marker.get("managed_files")
     if not isinstance(managed_files, dict):
@@ -329,6 +341,7 @@ def build_devcontainer_json(
     read_only_paths: list[str],
     gpu: dict[str, str],
     masked_file_paths: list[str] | None = None,
+    reference_paths: list[str] | None = None,
 ) -> dict[str, Any]:
     return parse_rendered_devcontainer_json(
         render_devcontainer_json(
@@ -337,6 +350,7 @@ def build_devcontainer_json(
             read_only_paths,
             gpu,
             masked_file_paths,
+            reference_paths,
         )
     )
 
@@ -347,6 +361,7 @@ def render_devcontainer_json(
     read_only_paths: list[str],
     gpu: dict[str, str],
     masked_file_paths: list[str] | None = None,
+    reference_paths: list[str] | None = None,
 ) -> str:
     validate_path_lists(masked_paths, read_only_paths)
     normalized_masked_paths = normalize_workspace_paths(masked_paths, "Masked")
@@ -366,6 +381,7 @@ def render_devcontainer_json(
         masked_file_placeholder=MASKED_FILE_PLACEHOLDER,
         masked_paths=normalized_masked_paths,
         read_only_paths=normalized_read_only_paths,
+        reference_mounts=build_reference_mounts(reference_paths or []),
     )
 
 
@@ -463,12 +479,18 @@ def config_read_only_scan_paths(config: dict[str, Any]) -> list[str]:
     )
 
 
+def config_reference_paths(config: dict[str, Any]) -> list[str]:
+    return normalize_reference_paths(
+        config_list(config, REFERENCE_PATHS_KEY, DEFAULT_REFERENCE_PATHS),
+    )
+
+
 def should_extend_default_read_only_paths(
     config: dict[str, Any],
     read_only_paths: list[str],
 ) -> bool:
     version = config.get("version")
-    if isinstance(version, int) and version >= CONFIG_VERSION:
+    if isinstance(version, int) and version >= READ_ONLY_DEFAULTS_CONFIG_VERSION:
         return False
     return read_only_paths == DEFAULT_READ_ONLY_PATHS
 
@@ -614,6 +636,29 @@ def prompt_read_only_paths(current: list[Any]) -> list[str]:
         new_paths = normalize_workspace_paths(split_editor_list(raw), "Read-only")
     print_prompt_result(
         "Workspace paths to mount read-only",
+        format_display_list(normalized_current),
+        format_display_list(new_paths),
+    )
+    return new_paths
+
+
+def prompt_reference_paths(current: list[Any]) -> list[str]:
+    normalized_current = normalize_reference_paths(current)
+    if not prompt_change(
+        "Change host project folders to mount read-only under /reference? "
+        f"Current: {format_display_list(normalized_current)}"
+    ):
+        return normalized_current
+    raw = edit_prompt_value(
+        "Host project folders to mount under reference",
+        format_editor_list(normalized_current),
+    ).strip()
+    if not raw or raw.lower() in {"none", "no", "-"}:
+        new_paths: list[str] = []
+    else:
+        new_paths = normalize_reference_paths(split_editor_list(raw))
+    print_prompt_result(
+        "Reference project folders",
         format_display_list(normalized_current),
         format_display_list(new_paths),
     )
@@ -875,6 +920,72 @@ def normalize_workspace_paths(values: list[Any], label: str) -> list[str]:
             normalized.append(path)
             seen.add(path)
     return normalized
+
+
+def normalize_reference_paths(values: list[Any]) -> list[str]:
+    normalized: list[str] = []
+    seen: set[str] = set()
+    targets: dict[str, str] = {}
+    for value in values:
+        path = os.path.expanduser(str(value).strip()).replace("\\", "/")
+        if not path:
+            continue
+        path = posixpath.normpath(path)
+        if path in {"", ".", "..", "/"}:
+            raise ValueError(
+                f"Reference project path {value!r} must name a project folder"
+            )
+        if "," in path:
+            raise ValueError(
+                f"Reference project path {value!r} must not contain commas"
+            )
+        name = posixpath.basename(path)
+        previous_source = targets.get(name)
+        if previous_source is not None and previous_source != path:
+            raise ValueError(
+                "Reference project paths must have unique folder names; "
+                f"{previous_source!r} and {path!r} would both mount at "
+                f"/reference/{name}"
+            )
+        targets[name] = path
+        if path not in seen:
+            normalized.append(path)
+            seen.add(path)
+    return normalized
+
+
+def build_reference_mounts(reference_paths: list[Any]) -> list[dict[str, str]]:
+    mounts: list[dict[str, str]] = []
+    for path in normalize_reference_paths(reference_paths):
+        name = posixpath.basename(path)
+        source = (
+            path
+            if path.startswith("/") or re.match(r"^[A-Za-z]:/", path)
+            else f"${{localWorkspaceFolder}}/{path}"
+        )
+        mounts.append({"source": source, "target": f"/reference/{name}"})
+    return mounts
+
+
+def validate_reference_paths(reference_paths: list[Any], workspace: Path) -> None:
+    normalized_paths = normalize_reference_paths(reference_paths)
+    resolved_workspace = workspace.resolve()
+    for path in normalized_paths:
+        source = Path(path).expanduser()
+        if not source.is_absolute():
+            source = workspace / source
+        resolved_source = source.resolve()
+        if (
+            resolved_source == resolved_workspace
+            or resolved_workspace in resolved_source.parents
+        ):
+            raise ValueError(
+                f"Reference project path {path!r} must be outside the workspace"
+            )
+        if not resolved_source.exists():
+            raise ValueError(f"Reference project path {path!r} does not exist")
+        if not resolved_source.is_dir():
+            raise ValueError(f"Reference project path {path!r} is not a directory")
 
 
 def merge_workspace_paths(*path_lists: list[str]) -> list[str]:

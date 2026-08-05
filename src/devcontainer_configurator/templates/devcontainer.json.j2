@@ -60,7 +60,10 @@
     "source=claude-code-config-${devcontainerId},target=/home/node/.claude,type=volume",
     "source=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind",
     "source=codex-config-${devcontainerId},target=/home/node/.codex,type=volume",
-    "source=pi-config-${devcontainerId},target=/home/node/.pi,type=volume"{% for path in masked_paths %},
+    "source=pi-config-${devcontainerId},target=/home/node/.pi,type=volume"{% for mount in reference_mounts %},
+    {{ (
+      "source=" ~ mount.source ~ ",target=" ~ mount.target ~ ",type=bind,readonly"
+    ) | tojson }}{% endfor %}{% for path in masked_paths %},
     {{ (
       "source=${localWorkspaceFolder}/.devcontainer/" ~ masked_file_placeholder
       ~ ",target=/workspace/" ~ path ~ ",type=bind,readonly"

@@ -36,6 +36,12 @@ The configurator prompts for:
   Project manifests such as `package.json` and `pyproject.toml` remain writable.
   The scan skips hidden directories and dependency/generated directories such
   as `.next` and `node_modules`.
+- Other host project folders to mount read-only as subdirectories of
+  `/reference`. Enter one folder per line using an absolute path or a path
+  relative to the configured workspace. For example, `../shared-api` is
+  available inside the container at `/reference/shared-api`. Reference folders
+  must exist outside the main workspace, and their final folder names must be
+  unique because those names become their `/reference` subdirectories.
 
 For each setting, the configurator shows the current value and asks whether to
 change it. If you choose to change it, it opens `$VISUAL` or `$EDITOR` with the
