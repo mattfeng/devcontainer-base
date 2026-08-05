@@ -66,13 +66,16 @@
     ) | tojson }}{% endfor %}{% for path in masked_paths %},
     {{ (
       "source=${localWorkspaceFolder}/.devcontainer/" ~ masked_file_placeholder
-      ~ ",target=/workspace/" ~ path ~ ",type=bind,readonly"
+      ~ ",target=/workspace/${localWorkspaceFolderBasename}/" ~ path
+      ~ ",type=bind,readonly"
       if path in masked_file_paths
-      else "target=/workspace/" ~ path ~ ",type=volume,volume-nocopy"
+      else "target=/workspace/${localWorkspaceFolderBasename}/" ~ path
+      ~ ",type=volume,volume-nocopy"
     ) | tojson }}{% endfor %}{% for path in read_only_paths %},
     {{ (
       "source=${localWorkspaceFolder}/" ~ path
-      ~ ",target=/workspace/" ~ path ~ ",type=bind,readonly"
+      ~ ",target=/workspace/${localWorkspaceFolderBasename}/" ~ path
+      ~ ",type=bind,readonly"
     ) | tojson }}{% endfor %}
   ],
   "containerEnv": {
@@ -85,8 +88,8 @@
     "DEVCONTAINER_HOST_PORTS": {{ host_ports | tojson }}{% if git_read_only %},
     "GIT_OPTIONAL_LOCKS": "0"{% endif %}
   },
-  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=delegated",
-  "workspaceFolder": "/workspace",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace/${localWorkspaceFolderBasename},type=bind,consistency=delegated",
+  "workspaceFolder": "/workspace/${localWorkspaceFolderBasename}",
   "postStartCommand": "sudo DEVCONTAINER_HOST_PORTS=\"${DEVCONTAINER_HOST_PORTS:-}\" /usr/local/bin/init-firewall.sh",
   "waitFor": "postStartCommand"
 }

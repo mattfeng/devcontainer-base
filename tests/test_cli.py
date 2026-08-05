@@ -218,23 +218,40 @@ class DevcontainerMountTests(unittest.TestCase):
         )
 
         mounts = devcontainer["mounts"]
-        self.assertIn("target=/workspace/.git,type=volume,volume-nocopy", mounts)
+        self.assertIn(
+            "target=/workspace/${localWorkspaceFolderBasename}/.git,"
+            "type=volume,volume-nocopy",
+            mounts,
+        )
         self.assertIn(
             "source=${localWorkspaceFolder}/.devcontainer/.empty-mask,"
-            "target=/workspace/private/file.txt,type=bind,readonly",
+            "target=/workspace/${localWorkspaceFolderBasename}/private/file.txt,"
+            "type=bind,readonly",
             mounts,
         )
         self.assertIn(
             "source=${localWorkspaceFolder}/.devcontainer,"
-            "target=/workspace/.devcontainer,type=bind,readonly",
+            "target=/workspace/${localWorkspaceFolderBasename}/.devcontainer,"
+            "type=bind,readonly",
             mounts,
         )
         self.assertIn(
             "source=${localWorkspaceFolder}/README.md,"
-            "target=/workspace/README.md,type=bind,readonly",
+            "target=/workspace/${localWorkspaceFolderBasename}/README.md,"
+            "type=bind,readonly",
             mounts,
         )
         self.assertNotIn("GIT_OPTIONAL_LOCKS", devcontainer["containerEnv"])
+        self.assertEqual(
+            devcontainer["workspaceMount"],
+            "source=${localWorkspaceFolder},"
+            "target=/workspace/${localWorkspaceFolderBasename},"
+            "type=bind,consistency=delegated",
+        )
+        self.assertEqual(
+            devcontainer["workspaceFolder"],
+            "/workspace/${localWorkspaceFolderBasename}",
+        )
 
     def test_build_devcontainer_mounts_reference_projects_by_folder_name(
         self,
@@ -249,12 +266,12 @@ class DevcontainerMountTests(unittest.TestCase):
 
         self.assertIn(
             "source=${localWorkspaceFolder}/../shared-api,"
-            "target=/reference/shared-api,type=bind,readonly",
+            "target=/workspace/reference/shared-api,type=bind,readonly",
             devcontainer["mounts"],
         )
         self.assertIn(
             "source=/projects/design-system,"
-            "target=/reference/design-system,type=bind,readonly",
+            "target=/workspace/reference/design-system,type=bind,readonly",
             devcontainer["mounts"],
         )
 
@@ -300,7 +317,8 @@ class DevcontainerMountTests(unittest.TestCase):
         self.assertEqual(devcontainer["containerEnv"]["GIT_OPTIONAL_LOCKS"], "0")
         self.assertIn(
             "source=${localWorkspaceFolder}/.git,"
-            "target=/workspace/.git,type=bind,readonly",
+            "target=/workspace/${localWorkspaceFolderBasename}/.git,"
+            "type=bind,readonly",
             devcontainer["mounts"],
         )
 
@@ -526,7 +544,8 @@ class DevcontainerMountTests(unittest.TestCase):
             )
             self.assertIn(
                 "source=${localWorkspaceFolder}/../reference-project,"
-                "target=/reference/reference-project,type=bind,readonly",
+                "target=/workspace/reference/reference-project,"
+                "type=bind,readonly",
                 devcontainer["mounts"],
             )
 

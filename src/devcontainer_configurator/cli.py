@@ -37,6 +37,7 @@ DEFAULT_REFERENCE_PATHS: list[str] = []
 MASKED_SCAN_PATHS_KEY = "masked_scan_paths"
 READ_ONLY_SCAN_PATHS_KEY = "read_only_scan_paths"
 REFERENCE_PATHS_KEY = "reference_paths"
+REFERENCE_ROOT = "/workspace/reference"
 READ_ONLY_DEFAULTS_CONFIG_VERSION = 4
 VENV_DIRNAME = ".venv"
 PACKAGE_MANAGER_LOCK_FILENAMES = {
@@ -645,7 +646,7 @@ def prompt_read_only_paths(current: list[Any]) -> list[str]:
 def prompt_reference_paths(current: list[Any]) -> list[str]:
     normalized_current = normalize_reference_paths(current)
     if not prompt_change(
-        "Change host project folders to mount read-only under /reference? "
+        f"Change host project folders to mount read-only under {REFERENCE_ROOT}? "
         f"Current: {format_display_list(normalized_current)}"
     ):
         return normalized_current
@@ -945,7 +946,7 @@ def normalize_reference_paths(values: list[Any]) -> list[str]:
             raise ValueError(
                 "Reference project paths must have unique folder names; "
                 f"{previous_source!r} and {path!r} would both mount at "
-                f"/reference/{name}"
+                f"{REFERENCE_ROOT}/{name}"
             )
         targets[name] = path
         if path not in seen:
@@ -963,7 +964,7 @@ def build_reference_mounts(reference_paths: list[Any]) -> list[dict[str, str]]:
             if path.startswith("/") or re.match(r"^[A-Za-z]:/", path)
             else f"${{localWorkspaceFolder}}/{path}"
         )
-        mounts.append({"source": source, "target": f"/reference/{name}"})
+        mounts.append({"source": source, "target": f"{REFERENCE_ROOT}/{name}"})
     return mounts
 
 

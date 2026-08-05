@@ -37,11 +37,16 @@ The configurator prompts for:
   The scan skips hidden directories and dependency/generated directories such
   as `.next` and `node_modules`.
 - Other host project folders to mount read-only as subdirectories of
-  `/reference`. Enter one folder per line using an absolute path or a path
-  relative to the configured workspace. For example, `../shared-api` is
-  available inside the container at `/reference/shared-api`. Reference folders
-  must exist outside the main workspace, and their final folder names must be
-  unique because those names become their `/reference` subdirectories.
+  `/workspace/reference`. Enter one folder per line using an absolute path or a
+  path relative to the configured workspace. For example, `../shared-api` is
+  available inside the container at `/workspace/reference/shared-api`.
+  Reference folders must exist outside the main workspace, and their final
+  folder names must be unique because those names become their
+  `/workspace/reference` subdirectories.
+
+The main project is mounted at `/workspace/<project-folder-name>` and used as
+the container's workspace folder. Reference projects sit alongside it under
+`/workspace/reference/`.
 
 For each setting, the configurator shows the current value and asks whether to
 change it. If you choose to change it, it opens `$VISUAL` or `$EDITOR` with the
