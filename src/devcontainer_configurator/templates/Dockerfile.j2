@@ -59,7 +59,9 @@ RUN SNIPPET="export PROMPT_COMMAND='history -a' && export HISTFILE=/commandhisto
 ENV DEVCONTAINER=true
 
 RUN mkdir -p /workspace/reference /home/node/.claude /home/node/.codex /home/node/.pi/agent && \
-  chown -R node:node /workspace /home/node/.claude /home/node/.codex /home/node/.pi
+  chown -R root:root /workspace && \
+  chmod 0555 /workspace /workspace/reference && \
+  chown -R node:node /home/node/.claude /home/node/.codex /home/node/.pi
 
 WORKDIR /workspace
 

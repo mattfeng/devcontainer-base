@@ -45,8 +45,9 @@ The configurator prompts for:
   `/workspace/reference` subdirectories.
 
 The main project is mounted at `/workspace/<project-folder-name>` and used as
-the container's workspace folder. Reference projects sit alongside it under
-`/workspace/reference/`.
+the container's workspace folder. This project mount is writable, while its
+`/workspace` parent is read-only. Reference projects sit alongside it under
+`/workspace/reference/` and are also mounted read-only.
 
 For each setting, the configurator shows the current value and asks whether to
 change it. If you choose to change it, it opens `$VISUAL` or `$EDITOR` with the

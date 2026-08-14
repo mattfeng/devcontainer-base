@@ -55,6 +55,32 @@ class DevcontainerMountTests(unittest.TestCase):
 
         self.assertIn("postgresql-client", generated_files["Dockerfile"])
 
+    def test_workspace_parent_is_read_only_but_project_mount_is_writable(
+        self,
+    ) -> None:
+        generated_files = cli.render_files(
+            host_ports=[],
+            masked_paths=[],
+            read_only_paths=[],
+            gpu=cli.DEFAULT_GPU,
+        )
+        devcontainer = cli.build_devcontainer_json(
+            host_ports=[],
+            masked_paths=[],
+            read_only_paths=[],
+            gpu=cli.DEFAULT_GPU,
+        )
+
+        dockerfile = generated_files["Dockerfile"]
+        self.assertIn("chown -R root:root /workspace", dockerfile)
+        self.assertIn("chmod 0555 /workspace /workspace/reference", dockerfile)
+        self.assertEqual(
+            devcontainer["workspaceMount"],
+            "source=${localWorkspaceFolder},"
+            "target=/workspace/${localWorkspaceFolderBasename},"
+            "type=bind,consistency=delegated",
+        )
+
     def test_generated_devcontainer_uses_node_24_and_modern_yarn(self) -> None:
         generated_files = cli.render_files(
             host_ports=[],
