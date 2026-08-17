@@ -1,4 +1,4 @@
-# Devcontainer for Claude Code, Codex, and Pi
+# Devcontainer for Claude Code, Codex, Pi, and Oh My Pi
 
 Run the configurator in the workspace you want to configure:
 
@@ -64,8 +64,9 @@ The generated files are defined by editable Jinja2 templates in
 `src/devcontainer_configurator/templates/`. The configurator creates
 `.devcontainer/Dockerfile`, `.devcontainer/devcontainer.json`, and
 `.devcontainer/init-firewall.sh` from those templates.
-The image includes the Claude Code, Codex, and [Pi](https://pi.dev/) agent
-harnesses. Their configuration is kept in separate named volumes so it survives
+The image includes the Claude Code, Codex, [Pi](https://pi.dev/), and
+[Oh My Pi](https://omp.sh/) agent harnesses. Run `pi` for Pi or `omp` for Oh My
+Pi. Their configuration is kept in separate named volumes so it survives
 container rebuilds.
 It writes managed file hashes to
 `.devcontainer/.managed-file-hashes.json`.

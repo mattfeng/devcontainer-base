@@ -159,10 +159,48 @@ class DevcontainerMountTests(unittest.TestCase):
             "target=/home/node/.pi,type=volume",
             devcontainer["mounts"],
         )
-        self.assertEqual(
-            devcontainer["containerEnv"]["PI_CODING_AGENT_DIR"],
-            "/home/node/.pi/agent",
+
+    def test_generated_devcontainer_installs_and_persists_oh_my_pi(self) -> None:
+        generated_files = cli.render_files(
+            host_ports=[],
+            masked_paths=[],
+            read_only_paths=[],
+            gpu=cli.DEFAULT_GPU,
         )
+        devcontainer = cli.build_devcontainer_json(
+            host_ports=[],
+            masked_paths=[],
+            read_only_paths=[],
+            gpu=cli.DEFAULT_GPU,
+        )
+
+        dockerfile = generated_files["Dockerfile"]
+        self.assertIn("ARG OH_MY_PI_VERSION=latest", dockerfile)
+        self.assertIn("ARG BUN_VERSION=1.3.14", dockerfile)
+        self.assertIn(
+            'curl -fsSL https://bun.com/install | bash -s "bun-v${BUN_VERSION}"',
+            dockerfile,
+        )
+        self.assertIn(
+            "bun install -g "
+            "@oh-my-pi/pi-coding-agent@${OH_MY_PI_VERSION}",
+            dockerfile,
+        )
+        self.assertIn("omp --version", dockerfile)
+        self.assertEqual(
+            devcontainer["build"]["args"]["OH_MY_PI_VERSION"],
+            "latest",
+        )
+        self.assertEqual(
+            devcontainer["build"]["args"]["BUN_VERSION"],
+            "1.3.14",
+        )
+        self.assertIn(
+            "source=oh-my-pi-config-${devcontainerId},"
+            "target=/home/node/.omp,type=volume",
+            devcontainer["mounts"],
+        )
+        self.assertNotIn("PI_CODING_AGENT_DIR", devcontainer["containerEnv"])
 
     def test_firewall_allows_modern_yarn_downloads(self) -> None:
         generated_files = cli.render_files(

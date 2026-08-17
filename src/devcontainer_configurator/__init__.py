@@ -1,4 +1,4 @@
-"""Claude Code, Codex, and Pi dev container configurator."""
+"""Claude Code, Codex, Pi, and Oh My Pi dev container configurator."""
 
 __all__ = ["__version__"]
 

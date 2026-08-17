@@ -1,5 +1,5 @@
 {
-  "name": "Claude Code/Codex/Pi Sandbox",
+  "name": "Claude Code/Codex/Pi/Oh My Pi Sandbox",
   "build": {
     "dockerfile": "Dockerfile",
     "context": ".",
@@ -8,6 +8,8 @@
       "CLAUDE_CODE_VERSION": "latest",
       "CODEX_CLI_VERSION": "latest",
       "PI_CODING_AGENT_VERSION": "latest",
+      "OH_MY_PI_VERSION": "latest",
+      "BUN_VERSION": "1.3.14",
       "YARN_MODERN_VERSION": "4",
       "GIT_DELTA_VERSION": "0.18.2",
       "ZSH_IN_DOCKER_VERSION": "1.2.0"
@@ -60,7 +62,8 @@
     "source=claude-code-config-${devcontainerId},target=/home/node/.claude,type=volume",
     "source=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind",
     "source=codex-config-${devcontainerId},target=/home/node/.codex,type=volume",
-    "source=pi-config-${devcontainerId},target=/home/node/.pi,type=volume"{% for mount in reference_mounts %},
+    "source=pi-config-${devcontainerId},target=/home/node/.pi,type=volume",
+    "source=oh-my-pi-config-${devcontainerId},target=/home/node/.omp,type=volume"{% for mount in reference_mounts %},
     {{ (
       "source=" ~ mount.source ~ ",target=" ~ mount.target ~ ",type=bind,readonly"
     ) | tojson }}{% endfor %}{% for path in masked_paths %},
@@ -83,7 +86,6 @@
     "NODE_OPTIONS": "--max-old-space-size=4096",
     "CLAUDE_CONFIG_DIR": "/home/node/.claude",
     "CODEX_HOME": "/home/node/.codex",
-    "PI_CODING_AGENT_DIR": "/home/node/.pi/agent",
     "POWERLEVEL9K_DISABLE_GITSTATUS": "true",
     "DEVCONTAINER_HOST_PORTS": {{ host_ports | tojson }}{% if git_read_only %},
     "GIT_OPTIONAL_LOCKS": "0"{% endif %}
