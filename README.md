@@ -26,6 +26,8 @@ uvx --from . configure-devcontainer --workspace /path/to/workspace
 
 The configurator prompts for:
 
+- Host operating system (`linux` or `macos`), detected automatically and shown
+  for confirmation. The X11 socket bind mount is included only for Linux.
 - GPU access: no GPUs, all GPUs, or one specific GPU device
 - Host TCP ports the container can reach through `host.docker.internal`
 - Workspace paths to mask from the container, defaulting to `.jj` and `.git`.

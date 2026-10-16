@@ -6,6 +6,7 @@ import argparse
 import hashlib
 import json
 import os
+import platform
 import posixpath
 import re
 import shlex
@@ -19,7 +20,7 @@ from jinja2 import Environment, FileSystemLoader, StrictUndefined, TemplateError
 
 
 TOOL_NAME = "codex-claude-devcontainer-configurator"
-CONFIG_VERSION = 5
+CONFIG_VERSION = 6
 DEVCONTAINER_DIRNAME = ".devcontainer"
 ROOT_STATE_FILENAME = ".devcontainer-configurator.json"
 MARKER_FILENAME = ".managed-file-hashes.json"
@@ -136,6 +137,7 @@ def configure(workspace: Path) -> int:
     current_reference_paths = config_reference_paths(prior_config)
     current_gpu = config_gpu(prior_config)
 
+    host_os = prompt_host_os(prior_config.get("host_os"))
     host_ports = prompt_host_ports(current_host_ports)
     masked_paths = prompt_masked_paths(current_masked_paths)
     read_only_paths = prompt_read_only_paths(current_read_only_paths)
@@ -163,6 +165,7 @@ def configure(workspace: Path) -> int:
     gpu = prompt_gpu(current_gpu)
     config = {
         "version": CONFIG_VERSION,
+        "host_os": host_os,
         "host_ports": host_ports,
         "masked_paths": masked_paths,
         MASKED_SCAN_PATHS_KEY: masked_scan_paths,
@@ -180,6 +183,7 @@ def configure(workspace: Path) -> int:
         gpu,
         masked_file_paths,
         reference_paths,
+        host_os=host_os,
     )
     for relative_path, content in generated_files.items():
         path = devcontainer_dir / relative_path
@@ -242,6 +246,7 @@ def render_files(
     gpu: dict[str, str],
     masked_file_paths: list[str] | None = None,
     reference_paths: list[str] | None = None,
+    host_os: str | None = None,
 ) -> dict[str, str]:
     devcontainer_json = render_devcontainer_json(
         host_ports,
@@ -250,6 +255,7 @@ def render_files(
         gpu,
         masked_file_paths,
         reference_paths,
+        host_os=host_os,
     )
     parse_rendered_devcontainer_json(devcontainer_json)
     return {
@@ -309,6 +315,7 @@ def template_changed_since_generation(
         config_gpu(config),
         detect_masked_file_paths(workspace, masked_paths),
         config_reference_paths(config),
+        host_os=config.get("host_os"),
     )
     managed_files = marker.get("managed_files")
     if not isinstance(managed_files, dict):
@@ -343,6 +350,7 @@ def build_devcontainer_json(
     gpu: dict[str, str],
     masked_file_paths: list[str] | None = None,
     reference_paths: list[str] | None = None,
+    host_os: str | None = None,
 ) -> dict[str, Any]:
     return parse_rendered_devcontainer_json(
         render_devcontainer_json(
@@ -352,6 +360,7 @@ def build_devcontainer_json(
             gpu,
             masked_file_paths,
             reference_paths,
+            host_os=host_os,
         )
     )
 
@@ -363,6 +372,7 @@ def render_devcontainer_json(
     gpu: dict[str, str],
     masked_file_paths: list[str] | None = None,
     reference_paths: list[str] | None = None,
+    host_os: str | None = None,
 ) -> str:
     validate_path_lists(masked_paths, read_only_paths)
     normalized_masked_paths = normalize_workspace_paths(masked_paths, "Masked")
@@ -377,6 +387,9 @@ def render_devcontainer_json(
         DEVCONTAINER_TEMPLATE_NAME,
         git_read_only=".git" in normalized_read_only_paths,
         gpu=normalize_gpu(gpu),
+        host_os=normalize_host_os(
+            host_os if host_os is not None else detected_host_os()
+        ),
         host_ports=format_ports(host_ports),
         masked_file_paths=masked_file_path_set,
         masked_file_placeholder=MASKED_FILE_PLACEHOLDER,
@@ -571,6 +584,30 @@ def config_gpu(config: dict[str, Any]) -> dict[str, str]:
     if isinstance(value, dict):
         return normalize_gpu(value)
     return DEFAULT_GPU.copy()
+
+
+def detected_host_os() -> str:
+    return {"Darwin": "macos", "Linux": "linux"}.get(platform.system(), "")
+
+
+def normalize_host_os(value: Any) -> str:
+    if isinstance(value, str) and value.strip().lower() in {"linux", "macos"}:
+        return value.strip().lower()
+    raise ValueError("Host operating system must be linux or macos")
+
+
+def prompt_host_os(current: Any = None) -> str:
+    detected = detected_host_os()
+    current = normalize_host_os(current) if current is not None else detected
+    if current and not prompt_change(
+        "Change host operating system (linux or macos)? "
+        f"Detected: {detected or 'unknown'}. Current: {current}"
+    ):
+        return current
+    raw = edit_prompt_value("Host operating system (linux or macos)", current + "\n")
+    host_os = normalize_host_os(raw)
+    print_prompt_result("Host operating system", current or "unknown", host_os)
+    return host_os
 
 
 def prompt_host_ports(current: list[Any]) -> list[int]:

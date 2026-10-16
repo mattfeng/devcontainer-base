@@ -44,6 +44,84 @@ class TemplateFileTests(unittest.TestCase):
         )
 
 
+class HostOperatingSystemTests(unittest.TestCase):
+    def test_detected_operating_system_is_confirmed_by_default(self) -> None:
+        for system, expected in (("Linux", "linux"), ("Darwin", "macos")):
+            with self.subTest(system=system), patch.object(
+                cli.platform, "system", return_value=system
+            ), patch("builtins.input", return_value="") as input_mock:
+                self.assertEqual(cli.prompt_host_os(), expected)
+                self.assertIn(f"Detected: {expected}", input_mock.call_args.args[0])
+
+    def test_user_can_override_detected_operating_system(self) -> None:
+        with patch.object(
+            cli.platform, "system", return_value="Linux"
+        ), patch("builtins.input", return_value="y"), patch.object(
+            cli, "edit_prompt_value", return_value="macOS\n"
+        ), patch("builtins.print"):
+            self.assertEqual(cli.prompt_host_os(), "macos")
+
+    def test_unknown_operating_system_requires_explicit_selection(self) -> None:
+        with patch.object(
+            cli.platform, "system", return_value="Windows"
+        ), patch.object(
+            cli, "edit_prompt_value", return_value="linux\n"
+        ), patch("builtins.input") as input_mock, patch("builtins.print"):
+            self.assertEqual(cli.prompt_host_os(), "linux")
+            input_mock.assert_not_called()
+
+    def test_invalid_operating_system_is_rejected(self) -> None:
+        with self.assertRaisesRegex(ValueError, "must be linux or macos"):
+            cli.render_files([], [], [], cli.DEFAULT_GPU, host_os="windows")
+
+    def test_x11_mount_is_only_rendered_for_linux(self) -> None:
+        x11_mount = "source=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind"
+        for host_os in ("linux", "macos"):
+            with self.subTest(host_os=host_os):
+                generated = cli.render_files(
+                    [], [], [], cli.DEFAULT_GPU, host_os=host_os
+                )
+                devcontainer = json.loads(generated["devcontainer.json"])
+                self.assertEqual(
+                    x11_mount in devcontainer["mounts"], host_os == "linux"
+                )
+
+    def test_configure_remembers_operating_system_and_uses_it_on_rerun(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            with patch.object(
+                cli.platform, "system", return_value="Linux"
+            ), patch(
+                "builtins.input", side_effect=["y", "n", "n", "n", "n", "n"]
+            ), patch.object(
+                cli, "edit_prompt_value", return_value="macos\n"
+            ), patch("builtins.print"):
+                self.assertEqual(cli.configure(workspace), 0)
+
+            with patch.object(
+                cli.platform, "system", return_value="Linux"
+            ), patch("builtins.input", return_value="n"), patch("builtins.print"):
+                self.assertEqual(cli.configure(workspace), 0)
+
+            config = cli.read_json(workspace / cli.ROOT_STATE_FILENAME)
+            marker = cli.read_json(
+                workspace / cli.DEVCONTAINER_DIRNAME / cli.MARKER_FILENAME
+            )
+            devcontainer = cli.read_json(
+                workspace / cli.DEVCONTAINER_DIRNAME / "devcontainer.json"
+            )
+            self.assertEqual(config["host_os"], "macos")
+            self.assertEqual(marker["config"]["host_os"], "macos")
+            self.assertNotIn(
+                "source=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind",
+                devcontainer["mounts"],
+            )
+            marker.pop(cli.TEMPLATE_FINGERPRINT_KEY)
+            self.assertFalse(
+                cli.template_changed_since_generation(marker, config, workspace)
+            )
+
+
 class DevcontainerMountTests(unittest.TestCase):
     def test_generated_dockerfile_includes_postgres_client(self) -> None:
         generated_files = cli.render_files(
@@ -571,6 +649,7 @@ class DevcontainerMountTests(unittest.TestCase):
                 remembered_config,
                 {
                     **saved_config,
+                    "host_os": cli.detected_host_os(),
                     cli.MASKED_SCAN_PATHS_KEY: [],
                     cli.READ_ONLY_SCAN_PATHS_KEY: ["uv.lock"],
                     cli.REFERENCE_PATHS_KEY: [],
@@ -586,7 +665,7 @@ class DevcontainerMountTests(unittest.TestCase):
 
             with patch(
                 "builtins.input",
-                side_effect=["n", "n", "n", "y", "n"],
+                side_effect=["n", "n", "n", "n", "y", "n"],
             ), patch("builtins.print"), patch.object(
                 cli,
                 "edit_prompt_value",
@@ -620,7 +699,7 @@ class DevcontainerMountTests(unittest.TestCase):
 
             with patch(
                 "builtins.input",
-                side_effect=["n", "n", "n", "n", "y", "n"],
+                side_effect=["n", "n", "n", "n", "n", "y", "n"],
             ), patch("builtins.print"), patch.object(
                 cli,
                 "edit_prompt_value",
@@ -652,7 +731,7 @@ class DevcontainerMountTests(unittest.TestCase):
 
             with patch(
                 "builtins.input",
-                side_effect=["n", "n", "n", "n", "y", "n"],
+                side_effect=["n", "n", "n", "n", "n", "y", "n"],
             ), patch("builtins.print"), patch.object(
                 cli,
                 "edit_prompt_value",
@@ -698,7 +777,7 @@ class DevcontainerMountTests(unittest.TestCase):
                 template_directory,
             ), patch(
                 "builtins.input",
-                side_effect=["y", "n", "n", "n", "n", "n"],
+                side_effect=["y", "n", "n", "n", "n", "n", "n"],
             ) as input_mock, patch(
                 "builtins.print"
             ):
