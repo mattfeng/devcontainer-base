@@ -91,6 +91,8 @@ ENV PATH=$PATH:/usr/local/share/npm-global/bin
 RUN pipx install uv && \
   uv --version
 
+RUN pipx install basedpyright
+
 ENV SHELL=/bin/zsh
 ENV EDITOR=nano
 ENV VISUAL=nano
