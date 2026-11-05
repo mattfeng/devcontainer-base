@@ -254,7 +254,7 @@ class DevcontainerMountTests(unittest.TestCase):
 
         dockerfile = generated_files["Dockerfile"]
         self.assertIn("ARG OH_MY_PI_VERSION=latest", dockerfile)
-        self.assertIn("ARG BUN_VERSION=1.3.14", dockerfile)
+        self.assertIn("ARG BUN_VERSION=1.4.4", dockerfile)
         self.assertIn(
             'curl -fsSL https://bun.com/install | bash -s "bun-v${BUN_VERSION}"',
             dockerfile,
@@ -271,7 +271,7 @@ class DevcontainerMountTests(unittest.TestCase):
         )
         self.assertEqual(
             devcontainer["build"]["args"]["BUN_VERSION"],
-            "1.3.14",
+            "1.4.4",
         )
         self.assertIn(
             "source=oh-my-pi-config-${devcontainerId},"
